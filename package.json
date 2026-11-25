@@ -1,0 +1,21 @@
+{
+  "name": "douyin-live-overlay",
+  "version": "1.0.0",
+  "description": "抖音直播间事件采集 + OBS 互动叠加层",
+  "main": "index.js",
+  "scripts": {
+    "start": "node lib/server.js",
+    "login": "node scripts/login.js",
+    "live": "node scripts/live.js",
+    "probe": "node scripts/probe-ws2.js",
+    "stop": "node scripts/stop.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "playwright": "^1.65.1",
+    "three": "^0.169.0",
+    "ws": "^8.23.0"
+  }
+}

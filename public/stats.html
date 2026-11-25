@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#070a10" />
+<link rel="icon" href="data:," />
+<title>打印规则 · 队列 · 直播互动</title>
+<style>
+:root{
+  --gold:#f5c26b; --gold-2:#ffe7a8; --pink:#ff5d8f; --blue:#4dc9ff; --green:#5ee0a0;
+  --ink:#e9eef8; --muted:#8b97ad; --line:rgba(255,255,255,.1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;overscroll-behavior:none}
+html.immersive,html.immersive body{background:radial-gradient(900px 700px at 20% 10%,#122033,#070a10 62%)}
+body{font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;color:var(--ink);
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#stage{position:absolute;left:0;top:0;width:1080px;height:1920px;transform-origin:0 0;
+  display:flex;flex-direction:column;padding:56px 44px 40px;gap:22px}
+#stage[data-bg="on"]{
+  background:
+    radial-gradient(760px 520px at 18% 12%,rgba(77,201,255,.13),transparent 62%),
+    radial-gradient(700px 560px at 86% 74%,rgba(255,93,143,.11),transparent 64%),
+    linear-gradient(150deg,#0b1220,#06090f 58%,#150c15);
+}
+#stage[data-bg="on"]::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:56px 56px;
+}
+
+/* ---------- 头部 ---------- */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}
+.brand{display:flex;align-items:center;gap:16px}
+.brand-mark{display:flex;align-items:flex-end;gap:4px;height:34px}
+.brand-mark span{width:7px;border-radius:3px;background:linear-gradient(180deg,var(--gold-2),var(--gold))}
+.brand-mark span:nth-child(1){height:16px;animation:bounce 1.6s ease-in-out infinite}
+.brand-mark span:nth-child(2){height:30px;animation:bounce 1.6s ease-in-out .2s infinite}
+.brand-mark span:nth-child(3){height:22px;animation:bounce 1.6s ease-in-out .4s infinite}
+.brand-text b{display:block;font-size:26px;letter-spacing:5px;color:#fff}
+.brand-text em{display:block;font-style:normal;font-size:13px;letter-spacing:3px;color:var(--muted);margin-top:4px}
+.conn{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);letter-spacing:1px}
+.conn .dot{width:9px;height:9px;border-radius:50%;background:#6d7890}
+.conn .dot.on{background:var(--green);box-shadow:0 0 12px var(--green)}
+
+/* ---------- 数字 ---------- */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.stat{border:1px solid var(--line);border-radius:20px;padding:20px 22px;
+  background:linear-gradient(160deg,rgba(18,24,38,.84),rgba(7,10,17,.8));
+  box-shadow:0 18px 40px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.05)}
+.stat .k{font-size:14px;letter-spacing:2px;color:var(--muted)}
+.stat .v{margin-top:6px;font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1;color:#fff}
+.stat .v.gold{color:var(--gold-2)}
+.stat .v.blue{color:#9ee6ff}
+.stat .u{font-size:15px;font-weight:600;color:var(--muted);margin-left:6px}
+
+/* ---------- 正在打印 ---------- */
+.now{border:1px solid rgba(245,194,107,.22);border-radius:20px;padding:18px 22px;display:flex;align-items:center;gap:18px;
+  background:linear-gradient(160deg,rgba(40,31,16,.72),rgba(10,8,5,.82));
+  box-shadow:0 18px 40px rgba(0,0,0,.36),inset 0 1px 0 rgba(255,255,255,.06);min-height:104px}
+.now .pulse{width:14px;height:14px;border-radius:50%;flex:0 0 auto;background:#6d7890}
+.now[data-busy="1"] .pulse{background:var(--green);box-shadow:0 0 16px var(--green);animation:blink 1s ease-in-out infinite}
+.now .txt{flex:1;min-width:0}
+.now .t1{font-size:15px;letter-spacing:2px;color:var(--muted)}
+.now .t2{font-size:30px;font-weight:800;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now .t2 em{font-style:normal;color:var(--gold-2)}
+.now .phase{font-size:14px;letter-spacing:2px;color:#9ee6ff;white-space:nowrap;padding:7px 14px;border-radius:10px;
+  background:rgba(77,201,255,.1);border:1px solid rgba(77,201,255,.24)}
+
+/* ---------- 面板 ---------- */
+.panel{border:1px solid var(--line);border-radius:22px;padding:22px 24px;
+  background:linear-gradient(160deg,rgba(18,24,38,.84),rgba(7,10,17,.8));
+  box-shadow:0 18px 40px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.05)}
+.panel h2{margin:0 0 16px;font-size:22px;letter-spacing:2px;display:flex;align-items:center;gap:12px;color:#f4f7ff}
+.panel h2 em{margin-left:auto;font-style:normal;font-size:14px;color:var(--muted);letter-spacing:1px}
+.ico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:15px;font-weight:800;color:#081018;
+  background:linear-gradient(160deg,var(--gold-2),var(--gold));box-shadow:0 0 16px rgba(245,194,107,.25)}
+.ico.heart{background:linear-gradient(160deg,#ff9ec0,var(--pink))}
+.ico.queue{background:linear-gradient(160deg,#9ee6ff,var(--blue))}
+.rule-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:13px;font-size:19px}
+.rule-list li{display:flex;align-items:center;gap:12px;color:#dce4f2}
+.tag{padding:4px 11px;border-radius:8px;font-size:16px;background:#1a2333;border:1px solid rgba(255,255,255,.08);white-space:nowrap}
+.tag.small{color:#8ed8ff}.tag.mid{color:#ffcf7a}.tag.big{color:#ff9ec0}
+.tag.xl{color:#ffe7a8;background:rgba(245,194,107,.12);border-color:rgba(245,194,107,.32)}
+.tag.combo{color:#c7b3ff}
+.arrow{color:#596780}
+.out{margin-left:auto;color:#f0f4ff;font-weight:700;font-size:18px;white-space:nowrap}
+.out.hot{color:var(--gold-2)}
+.rule-list .dot{width:11px;height:11px;border-radius:50%;background:var(--muted);box-shadow:0 0 10px currentColor;flex:0 0 auto}
+.dot.gold{background:var(--gold);color:var(--gold)}
+.dot.blue{background:var(--blue);color:var(--blue)}
+.dot.green{background:var(--green);color:var(--green)}
+.dot.gray{background:#5b6579;color:#5b6579}
+.rule-list b{margin-left:auto;color:var(--gold-2);font-weight:700;font-size:17px}
+.rule-list .muted{color:#6d7890;font-size:16px}
+.lottery-row{margin-top:16px;padding-top:14px;border-top:1px dashed rgba(255,255,255,.1);display:flex;align-items:baseline;gap:12px}
+.lottery-row .lk{font-size:15px;letter-spacing:2px;color:var(--muted)}
+.lottery-row .lv{font-size:38px;font-weight:800;color:var(--gold-2);font-variant-numeric:tabular-nums;letter-spacing:1px}
+
+/* ---------- 队列 ---------- */
+.queue-panel{flex:1;min-height:0;display:flex;flex-direction:column}
+/* 队列多的时候能滚动：OBS 里用「与场景交互」滚，手机直接手指拖 */
+.queue-list{list-style:none;margin:0;padding:0 6px 0 0;display:flex;flex-direction:column;gap:10px;
+  flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent;-webkit-overflow-scrolling:touch}
+.queue-list::-webkit-scrollbar{width:6px}
+.queue-list::-webkit-scrollbar-track{background:transparent}
+.queue-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:99px}
+.queue-list.flash{animation:queueFlash .5s ease-out}
+.queue-list li{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);min-height:76px}
+.queue-list li.rank-1{background:linear-gradient(90deg,rgba(245,194,107,.14),rgba(255,255,255,.03));border-color:rgba(245,194,107,.28)}
+.rk{width:30px;flex:0 0 30px;text-align:center;font-size:18px;font-weight:800;color:#66738c;font-variant-numeric:tabular-nums}
+.rank-1 .rk{color:var(--gold-2)}
+.q-ava{position:relative;width:52px;height:52px;border-radius:50%;overflow:hidden;flex:0 0 auto;display:grid;place-items:center;
+  background:linear-gradient(160deg,#2a3550,#111722);border:2px solid rgba(255,255,255,.18)}
+.q-ava img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.q-ava b{font-size:20px;color:var(--gold-2)}
+.q-ava.tier-0{border-color:rgba(200,180,150,.45)}
+.q-ava.tier-1{border-color:rgba(77,201,255,.5)}.q-ava.tier-2{border-color:rgba(245,194,107,.55)}.q-ava.tier-3{border-color:rgba(255,93,143,.6)}
+.q-main{flex:1;min-width:0}
+.q-name{font-size:21px;font-weight:700;color:#eef3fb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-sub{font-size:15px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-val{text-align:right;flex:0 0 auto}
+.q-badge{display:inline-block;font-size:14px;padding:4px 10px;border-radius:8px;background:rgba(77,201,255,.12);color:#9ee6ff;white-space:nowrap}
+.q-badge.gold{background:rgba(245,194,107,.14);color:var(--gold-2)}
+.q-size{font-size:14px;font-weight:700;color:var(--gold-2);margin-top:5px;white-space:nowrap}
+.queue-empty{flex:1;display:grid;place-content:center;text-align:center;gap:10px;color:#65718a}
+.queue-empty[hidden]{display:none!important}
+@keyframes queueFlash{0%{box-shadow:inset 0 0 0 2px rgba(245,194,107,0)}35%{box-shadow:inset 0 0 0 2px rgba(245,194,107,.45)}100%{box-shadow:inset 0 0 0 2px rgba(245,194,107,0)}}
+.queue-empty .big{font-size:22px;letter-spacing:3px}
+.queue-empty .small{font-size:15px;color:#4f5a6f;line-height:1.7}
+
+/* ---------- 底部 ---------- */
+.foot{display:flex;align-items:center;justify-content:space-between;font-size:13px;letter-spacing:1px;color:var(--muted)}
+.foot b{color:var(--gold-2)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes bounce{0%,100%{transform:scaleY(.82)}50%{transform:scaleY(1.06)}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark"><span></span><span></span><span></span></div>
+      <div class="brand-text"><b>PRINT QUEUE</b><em>礼物打印规则 · 实时队列</em></div>
+    </div>
+    <div class="conn"><span class="dot" id="connDot"></span><span id="connText">连接中…</span></div>
+  </header>
+
+  <section class="stats">
+    <div class="stat"><div class="k">在线观众</div><div class="v blue" id="stOnline">—</div></div>
+    <div class="stat"><div class="k">累计抖币</div><div class="v gold" id="stCoin">0</div></div>
+    <div class="stat"><div class="k">已打印奖杯</div><div class="v" id="stDone">0</div></div>
+  </section>
+
+  <section class="now" id="nowBox" data-busy="0">
+    <span class="pulse"></span>
+    <div class="txt">
+      <div class="t1">正在打印</div>
+      <div class="t2" id="nowText">打印机待机中</div>
+    </div>
+    <span class="phase" id="nowPhase">STANDBY</span>
+  </section>
+
+  <section class="panel">
+    <h2><span class="ico gift">礼</span>礼物优先打印</h2>
+    <ul class="rule-list" id="giftRules">
+      <li><span class="tag small">小心心</span><span class="arrow">→</span><span class="out">小号奖杯</span></li>
+      <li><span class="tag mid">大啤酒</span><span class="arrow">→</span><span class="out">小号奖杯</span></li>
+      <li><span class="tag big">鲜花</span><span class="arrow">→</span><span class="out">中号奖杯</span></li>
+      <li><span class="tag big">棒棒糖</span><span class="arrow">→</span><span class="out">大号奖杯</span></li>
+      <li><span class="tag xl">嘉年华 / 连击 ×N</span><span class="arrow">→</span><span class="out hot">超大 + 皇冠</span></li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2><span class="ico heart">❤</span>互动打印</h2>
+    <ul class="rule-list interact">
+      <li><span class="dot gold"></span>点赞每 <b id="ruleLike">20</b> 下 → 小头像 + 语音答谢</li>
+      <li><span class="dot blue"></span>关注了主播 / 分享了直播间 → 打印</li>
+      <li><span class="dot green"></span>每 <b id="ruleLotteryMin">5</b> 分钟抽 1 人 → 打印</li>
+      <li class="muted"><span class="dot gray"></span>在线 ≤50 时进直播间也打印小奖牌；普通弹幕不触发</li>
+    </ul>
+    <div class="lottery-row">
+      <span class="lk">下次抽奖</span>
+      <span class="lv" id="lotteryClock">--:--</span>
+    </div>
+  </section>
+
+  <section class="panel queue-panel">
+    <h2><span class="ico queue">≡</span>打印队列<em id="queueCount">0</em></h2>
+    <ol class="queue-list" id="queueList"></ol>
+    <div class="queue-empty" id="queueEmpty">
+      <div class="big">等待礼物…</div>
+      <div class="small" id="emptyHint">收到礼物后，这里按优先级实时排队</div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>礼物越大越先打印，同档按排队先后</span>
+    <span id="syncText">等待打印机页面…</span>
+  </footer>
+</div>
+
+<script src="/voice.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const params = new URLSearchParams(location.search);
+  const CFG = { demo: params.has('demo'), bg: params.get('bg') };
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage');
+
+  const DESIGN = { w: 1080, h: 1920 };
+  function applyBg() {
+    // 竖屏默认带沉浸背景；要透明叠加到直播画面上加 ?bg=0
+    const immersive = CFG.bg === '1' || CFG.bg !== '0';
+    stage.dataset.bg = immersive ? 'on' : '';
+    document.documentElement.classList.toggle('immersive', immersive);
+  }
+  function fit() {
+    const s = Math.min(innerWidth / DESIGN.w, innerHeight / DESIGN.h);
+    stage.style.transform = `translate(${(innerWidth - DESIGN.w * s) / 2}px, ${(innerHeight - DESIGN.h * s) / 2}px) scale(${s})`;
+  }
+  applyBg();
+  fit();
+  addEventListener('resize', fit);
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmtNum = (n) => {
+    n = Number(n) || 0;
+    return n >= 10000 ? (n / 10000).toFixed(1).replace(/\.0$/, '') + '万' : String(n);
+  };
+
+  const PHASES = {
+    idle: '待机', load: '装料中', home: '归零', print: '逐层打印', engrave: '激光铭刻', reveal: '揭幕', shelf: '上架',
+  };
+
+  /* ---------- 渲染 ---------- */
+  let snap = null;
+  let online = null;
+  let lotteryNext = 0;
+  let lastSnapAt = 0;
+
+  function renderNow() {
+    const box = $('nowBox');
+    const busy = snap && snap.now;
+    box.dataset.busy = busy ? '1' : '0';
+    if (busy) {
+      $('nowText').innerHTML = `${esc(snap.now.name)}<em> · ${esc(snap.now.label)}</em>`;
+      $('nowPhase').textContent = PHASES[snap.state] || '打印中';
+    } else {
+      $('nowText').textContent = '打印机待机中';
+      $('nowPhase').textContent = 'STANDBY';
+    }
+  }
+
+  // 认一下当前队列：内容没变就不重绘，内容变了再刷，滚动位置不跳
+  const SIZE_NAME = { sm: '小号奖杯', md: '中号奖杯', lg: '大号奖杯', xl: '超大 + 皇冠' };
+  const RANK = { sm: 0, md: 1, lg: 2, xl: 3 };
+  function sizeNameOf(j) {
+    if (j.size) return SIZE_NAME[j.size] || '';
+    if (j.tier >= 3) return SIZE_NAME.xl;
+    if (j.tier === 2) return SIZE_NAME.lg;
+    if (j.tier === 1) return SIZE_NAME.md;
+    return '';
+  }
+  function rowHtml(j, i) {
+    const initial = [...(j.name || '?')][0] || '?';
+    const img = j.avatar
+      ? `<img src="/img?u=${encodeURIComponent(j.avatar)}" alt="" loading="lazy" onerror="this.remove()">`
+      : '';
+    const isGift = !!j.gift;
+    const SUB = { '幸运观众': '抽奖中奖', '关注': '刚关注了主播', '分享': '帮忙分享了直播间', '666': '评论区扣 666' };
+    const sub = isGift ? `送出 ×${j.count}` : esc(SUB[j.label] || j.label);
+    const size = sizeNameOf(j);
+    return `<li class="${i === 0 ? 'rank-1' : ''}">
+      <span class="rk">${i + 1}</span>
+      <span class="q-ava tier-${j.tier}">${img}<b>${esc(initial)}</b></span>
+      <span class="q-main">
+        <span class="q-name">${esc(j.name)}</span>
+        <span class="q-sub">${sub}</span>
+      </span>
+      <span class="q-val">
+        <span class="q-badge ${isGift ? 'gold' : ''}">${esc(isGift ? j.gift : j.label)}</span>
+        ${size ? `<div class="q-size">${esc(size)}</div>` : ''}
+      </span>
+    </li>`;
+  }
+  // 内容变了才重绘；重绘后把滚动位置还原，观众正在看的那几行不会跳走
+  let queueSig = '';
+  const RENDER_ALL = 18;        // 队列再长也只渲染前 18 条，其余靠滚动
+  function renderQueue() {
+    const q = (snap && snap.queue) || [];
+    const sig = q.length + '|' + q.map((j) => [j.name, j.gift, j.count, j.label, j.tier].join(':')).join(';');
+    if (sig === queueSig) return;
+    queueSig = sig;
+    const list = $('queueList');
+    const prevTop = list.scrollTop;
+    $('queueCount').textContent = String(snap ? snap.queued : 0);
+    $('queueEmpty').hidden = q.length > 0;
+    if (!q.length && !snap) $('emptyHint').textContent = '需要同时打开 3D 工作室（/studio），这里才会显示实时队列';
+    else if (!q.length) $('emptyHint').textContent = '收到礼物后，这里按优先级实时排队';
+    list.innerHTML = q.slice(0, RENDER_ALL).map(rowHtml).join('');
+    list.scrollTop = prevTop;
+    if (q.length) {
+      list.classList.remove('flash');
+      void list.offsetWidth;
+      list.classList.add('flash');
+    }
+  }
+
+  // 礼物规则不做假数据：没快照就保留上面的默认文案
+  const MAX_GIFT_ROWS = 6;
+  function renderGiftRules() {
+    const sig = giftRulesSignature();
+    if (!sig || sig === giftRulesSig) return;
+    giftRulesSig = sig;
+    const rows = [...(snap.giftSizes || [])].filter((r) => r.size)
+      .sort((a, b) => (RANK[a.size] || 0) - (RANK[b.size] || 0))
+      .slice(0, MAX_GIFT_ROWS);
+    if (!rows.length) return;
+    $('giftRules').innerHTML = rows.map((r, i) => {
+      const hot = r.size === 'xl' ? ' hot' : '';
+      const tagCls = r.size === 'xl' ? 'xl' : r.size === 'lg' ? 'big' : r.size === 'md' ? 'big' : (i % 2 ? 'mid' : 'small');
+      return `<li><span class="tag ${tagCls}">${esc(r.gift)}</span><span class="arrow">→</span><span class="out${hot}">${esc(SIZE_NAME[r.size] || '奖杯')}</span></li>`;
+    }).join('');
+  }
+
+  function giftRulesSignature() { return (snap && snap.giftSizes) ? JSON.stringify(snap.giftSizes.map((g) => g.gift)) : ''; }
+  let giftRulesSig = '';
+
+  function renderStats() {
+    const onlineShown = snap && snap.online != null ? snap.online : online;
+    $('stOnline').textContent = onlineShown == null ? '—' : fmtNum(onlineShown);
+    $('stCoin').textContent = snap ? fmtNum(snap.coin) : '—';
+    $('stDone').textContent = snap ? String(snap.printed) : '—';
+    if (snap) {
+      if (snap.likeStep) $('ruleLike').textContent = String(snap.likeStep);
+      if (snap.lotteryMin) $('ruleLotteryMin').textContent = String(snap.lotteryMin);
+      lotteryNext = snap.lotteryNext || 0;
+    }
+    $('syncText').textContent = snap
+      ? `队列数据同步于 ${Math.max(0, Math.round((Date.now() - snap.ts) / 1000))} 秒前`
+      : '等待打印机页面…';
+  }
+
+  function renderAll() {
+    renderStats();
+    renderNow();
+    renderQueue();
+    renderGiftRules();
+  }
+
+  // 抽奖倒计时（每帧只改文本）
+  setInterval(() => {
+    const el = $('lotteryClock');
+    if (!lotteryNext) { el.textContent = '--:--'; return; }
+    const left = Math.max(0, lotteryNext - Date.now());
+    const m = Math.floor(left / 60000);
+    const s = Math.floor((left % 60000) / 1000);
+    el.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }, 500);
+  // “N 秒前”跟着走
+  // 统计/"几秒前"每秒刷一次；队列数据本身每秒推一次（/studio 0.7 秒推一次快照）
+  setInterval(() => { if (snap) { renderStats(); renderNow(); renderQueue(); renderGiftRules(); } }, 1000);
+
+  function setConn(text, ok) {
+    $('connText').textContent = text;
+    $('connDot').classList.toggle('on', !!ok);
+  }
+
+  /* ---------- WebSocket ---------- */
+  function dispatch(m) {
+    switch (m.type) {
+      case 'hello':
+        if (m.printer && Date.now() - (m.printer.ts || 0) < 30000) { snap = m.printer; lastSnapAt = Date.now(); renderAll(); }
+        if (m.online != null) { online = m.online; renderStats(); }
+        else if (m.printer) { online = m.printer.online; renderStats(); }
+        if (window.Voice) Voice.apply(m.voice);
+        setConn('已连接', true);
+        break;
+      case 'voice-config':
+        if (window.Voice) Voice.apply(m.voice);
+        break;
+      case 'stats':
+        if (m.online != null) { online = m.online; renderStats(); }
+        break;
+      case 'stats-snapshot':
+        if (!m.snapshot) break;
+        snap = m.snapshot;
+        lastSnapAt = Date.now();
+        renderAll();
+        break;
+      case 'room':
+      case 'room-changed':
+        snap = null;
+        renderAll();
+        break;
+      case 'stopped':
+        snap = null;
+        setConn('监控已停止', false);
+        renderAll();
+        break;
+      case 'error':
+        setConn('错误：' + (m.message || '未知'), false);
+        break;
+      default:
+        break;
+    }
+  }
+
+  let ws = null;
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    try { ws = new WebSocket(`${proto}://${location.host}/events`); } catch (e) { setTimeout(connect, 2000); return; }
+    ws.onopen = () => { setConn('已连接', true); ws.send(JSON.stringify({ type: 'stats-req' })); };
+    ws.onclose = () => { setConn('断开，重连中…', false); setTimeout(connect, 2000); };
+    ws.onerror = () => {};
+    ws.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+      dispatch(m);
+    };
+  }
+
+  // 打印机页面可能比本页开得晚，没数据时温柔地再问一次
+  setInterval(() => {
+    if (snap) return;
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'stats-req' }));
+  }, 5000);
+  // 快照太久没更新，提示一下（打印机页面被关掉了）
+  setInterval(() => {
+    if (snap && Date.now() - lastSnapAt > 20000) {
+      $('syncText').textContent = '3D 工作室页面已关闭，队列暂停同步';
+    }
+  }, 5000);
+
+  /* ---------- 演示模式 ---------- */
+  function startDemo() {
+    setConn('演示模式', true);
+    const names = ['小鹿乱撞', '一只咸鱼', '夜航船', '阿May', '甜筒不加冰', '橘子汽水', '风你吹过', '咕噜咕噜', '不爱吃香菜', '南巷旧人'];
+    const gifts = [
+      { name: '小心心', diamond: 1 }, { name: '大啤酒', diamond: 2 }, { name: '鲜花', diamond: 5 },
+      { name: '棒棒糖', diamond: 9 }, { name: '小海豚', diamond: 10 }, { name: '嘉年华', diamond: 3000 },
+    ];
+    const pick = (a) => a[(Math.random() * a.length) | 0];
+    const rand = (a, b) => a + Math.random() * (b - a);
+    let n = 0, coin = 860, printed = 12, q = [];
+    const states = ['load', 'home', 'print', 'engrave', 'reveal', 'shelf'];
+    setInterval(() => {
+      n++;
+      if (Math.random() < 0.7) {
+        const g = pick(gifts);
+        const count = 1 + ((Math.random() * 3) | 0);
+        const total = g.diamond * count;
+        coin += total;
+        q.push({
+          name: pick(names) + ((Math.random() * 90) | 0), tier: g.diamond >= 10 ? 3 : g.diamond >= 5 ? 2 : 1,
+          avatar: '', label: '礼物', gift: g.name, count, value: total,
+        });
+      } else if (Math.random() < 0.5) {
+        q.push({ name: pick(names), tier: 1, avatar: '', label: pick(['关注', '分享']), gift: '', count: 1, value: 0 });
+      } else {
+        q.push({ name: pick(names), tier: 2, avatar: '', label: Math.random() < 0.5 ? '新关注' : '分享直播间', gift: '', count: 1, value: 0 });
+      }
+      if (q.length > 12) q.shift();
+      const busy = q.length > 2 && Math.random() < 0.6;
+      if (busy) printed++;
+      snap = {
+        ts: Date.now(), online: 12000 + ((Math.random() * 8000) | 0), coin, printed, gifts: n,
+        state: busy ? pick(states) : 'idle',
+        now: busy ? { name: q[0].name, label: q[0].gift ? `${q[0].gift} ×${q[0].count}` : q[0].label, tier: q[0].tier } : null,
+        lotteryNext: Date.now() + rand(60000, 300000),
+        likeStep: 20, lotteryMin: 5,
+        queued: q.length,
+        queue: q.slice().sort((a, b) => b.value - a.value).slice(0, 10).map((j) => ({ ...j })),
+      };
+      online = snap.online;
+      lastSnapAt = Date.now();
+      renderAll();
+    }, 1500);
+  }
+
+  renderAll();
+  if (CFG.demo) startDemo(); else connect();
+
+  // 调试入口
+  window.__stats = {
+    snapshot: (s) => dispatch({ type: 'stats-snapshot', snapshot: s }),
+    state: () => ({ snap, online }),
+  };
+})();
+</script>
+</body>
+</html>

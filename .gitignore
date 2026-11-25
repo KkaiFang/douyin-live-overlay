@@ -1,0 +1,16 @@
+# 依赖
+node_modules/
+
+# Playwright 登录态 / 浏览器配置（含抖音 Cookie，切勿上传）
+.profile/
+
+# 服务端 TTS 缓存
+.voice/
+
+# 临时工作目录
+work/
+
+# 日志与本地配置
+*.log
+.env
+.DS_Store

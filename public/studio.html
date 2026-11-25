@@ -1,0 +1,2018 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#0d0a08" />
+<link rel="icon" href="data:," />
+<title>3D 打印工作室 · 直播互动</title>
+<style>
+:root{ --gold:#f5c26b; --gold-2:#ffe7a8; --ink:#e9eef8; --muted:#8b97ad; }
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d0a08;overscroll-behavior:none;touch-action:none}
+body{font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;color:var(--ink);
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0d0a08}
+#stage[data-clear="1"]{background:transparent}
+#stage canvas{display:block;width:100%;height:100%}
+
+/* 当前打印信息：贴着画面底部，很小一块，不抢镜头 */
+.caption{position:fixed;left:22px;bottom:20px;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:10px 16px 10px 12px;border-radius:14px;background:rgba(10,8,6,.62);border:1px solid rgba(245,194,107,.22);
+  backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.4);transition:opacity .5s;
+  font-size:14px;letter-spacing:.5px;max-width:min(520px,calc(100vw - 44px))}
+.caption[hidden]{display:none!important}
+.caption .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:14px;font-weight:800;color:#1b1206;
+  background:linear-gradient(160deg,var(--gold-2),var(--gold));flex:0 0 auto}
+.caption .txt{min-width:0}
+.caption .who{font-size:16px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.caption .meta{font-size:12px;color:#b9a884;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.caption .bar{width:112px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden;flex:0 0 auto}
+.caption .bar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--pink,#ff5d8f))}
+
+.conn{position:fixed;right:20px;top:16px;z-index:20;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+  padding:7px 12px;border-radius:999px;background:rgba(10,8,6,.5);border:1px solid rgba(255,255,255,.08)}
+.conn .dot{width:8px;height:8px;border-radius:50%;background:#6d7890}
+.conn .dot.on{background:#5ee0a0;box-shadow:0 0 10px #5ee0a0}
+
+.tap-pill{position:fixed;left:50%;bottom:8vh;transform:translateX(-50%);z-index:30;cursor:pointer;
+  padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:1px;
+  background:rgba(12,10,8,.86);border:1px solid rgba(245,194,107,.4);color:#f0d9a8;
+  box-shadow:0 8px 26px rgba(0,0,0,.45);white-space:nowrap}
+.tap-pill[hidden]{display:none!important}
+
+/* 首次加载遮罩：画面准备好之前盖住，避免看到半成品时卡一下 */
+.boot{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:#0d0a08;transition:opacity .45s}
+.boot.hide{opacity:0;pointer-events:none}
+.boot-in{display:flex;flex-direction:column;align-items:center;gap:12px;color:#cbb48a}
+.boot-ico{font-size:38px;animation:bootBob 1.4s ease-in-out infinite}
+.boot-in b{font-size:16px;letter-spacing:1px;color:#efe4cd}
+.boot-in #bootStep{font-size:12.5px;letter-spacing:2px;color:#8b7a5c}
+@keyframes bootBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+/* 相机控制条：默认隐藏，鼠标动一下 / 按 H 出现 3 秒 */
+.cam-bar{position:fixed;right:18px;bottom:18px;z-index:25;display:flex;gap:8px;align-items:center;
+  padding:8px 10px;border-radius:14px;background:rgba(10,8,6,.72);border:1px solid rgba(245,194,107,.22);
+  backdrop-filter:blur(10px);opacity:0;pointer-events:none;transition:opacity .25s}
+.cam-bar.show{opacity:1;pointer-events:auto}
+.cam-bar .grp{display:flex;gap:6px}
+.cam-bar .sep{width:1px;height:22px;background:rgba(255,255,255,.12)}
+.cam-bar button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e9eef8;
+  border-radius:9px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.cam-bar button:hover{background:rgba(255,255,255,.12)}
+.cam-bar button.on{background:rgba(245,194,107,.22);border-color:rgba(245,194,107,.55);color:#ffe7a8}
+.err{position:fixed;inset:0;z-index:50;display:none;place-content:center;text-align:center;gap:14px;padding:30px;
+  background:#0d0a08;color:#e9eef8}
+.err.show{display:grid}
+.err b{font-size:20px}
+.err span{font-size:14px;color:#8b97ad;line-height:1.8}
+.err a{color:var(--gold-2)}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="caption" id="caption" hidden>
+  <span class="ico" id="capIcon">礼</span>
+  <span class="txt">
+    <span class="who" id="capWho">—</span>
+    <span class="meta" id="capMeta">等待礼物…</span>
+  </span>
+  <span class="bar"><i id="capBar"></i></span>
+</div>
+
+<div class="boot" id="boot">
+  <div class="boot-in">
+    <span class="boot-ico">🖨️</span>
+    <b>正在准备 3D 打印台…</b>
+    <span id="bootStep">加载模型</span>
+  </div>
+</div>
+
+<div class="cam-bar" id="camBar">
+  <span class="grp">
+    <button type="button" data-view="overview" title="全景（快捷键 1）">全景</button>
+    <button type="button" data-view="close" title="特写（快捷键 2）">特写</button>
+  </span>
+  <span class="sep"></span>
+  <span class="grp">
+    <button type="button" data-orient="auto" title="跟随窗口比例（快捷键 A）">自动</button>
+    <button type="button" data-orient="landscape" title="固定横屏 16:9（快捷键 L）">横屏</button>
+    <button type="button" data-orient="portrait" title="固定竖屏 9:16（快捷键 P）">竖屏</button>
+  </span>
+</div>
+
+<div class="conn"><span class="dot" id="connDot"></span><span id="connText">连接中…</span></div>
+<div class="tap-pill" id="tapPill" hidden>🔊 点一下开启语音欢迎</div>
+
+<div class="err" id="err">
+  <b>这个浏览器开不了 3D</b>
+  <span>需要支持 WebGL2 的浏览器（OBS 内置 Chromium 也可以，但显卡驱动太旧会失败）。<br>
+  换一台有硬件加速的电脑/Chrome 试试，或在 OBS 里给浏览器源勾选硬件加速。</span>
+</div>
+
+<script src="/voice.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/vendor/three.module.js",
+    "three/addons/": "/vendor/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from '/vendor/OrbitControls.js';
+import { RoomEnvironment } from '/vendor/RoomEnvironment.js';
+
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const CFG = {
+  demo: params.has('demo'),
+  edit: params.has('edit'),                 // ?edit=1 打开轨道相机，自己调构图
+  alpha: params.get('alpha') === '1',       // ?alpha=1 透明背景，方便叠直播画面
+  speed: Math.max(0.25, Math.min(4, Number(params.get('speed')) || 1)),
+  likeStep: Math.max(1, Number(params.get('like')) || 20),
+  lottery: params.get('lottery') !== '0',
+  lotteryMin: Math.max(0.02, Number(params.get('lotteryMin')) || (params.has('demo') ? 0.5 : 5)),
+  presence: Math.max(30, Number(params.get('presence')) || 180),   // 抽奖只抽最近 N 秒内有动静的观众（默认 3 分钟，近似"还在直播间"）
+  maxq: Math.max(4, Number(params.get('maxq')) || 30),
+  hud: params.get('hud') !== '0',
+  printSec: Math.max(1.5, Number(params.get('printSec')) || 4),   // 单个奖杯打印时长（秒），比原来快一倍
+  quality: params.get('q') || 'high',   // high（默认）| low：老显卡/集显卡顿时用 ?q=low 关阴影和清漆
+  sfx: params.get('sfx') !== '0',       // 打印音效；?sfx=0 关闭
+};
+if (!CFG.hud) $('caption').hidden = true;
+
+/* ================= 渲染器 ================= */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: CFG.quality !== 'low', alpha: CFG.alpha, powerPreference: 'high-performance' });
+} catch (e) {
+  $('err').classList.add('show');
+  throw e;
+}
+const stage = $('stage');
+const MAX_DPR = CFG.quality === 'low' ? 1 : Math.max(1.5, Math.min(3, Number(params.get('dpr')) || 2));   // 默认 2（Retina 原生 1:1），OBS 1080p 也够锐；?dpr=1.5 省显卡
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, MAX_DPR));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.22;
+renderer.shadowMap.enabled = CFG.quality !== 'low';
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+/* 阴影贴图不必每帧重算：隔几帧更新一次，打印时也不掉帧 */
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
+renderer.localClippingEnabled = true;
+/* 关掉每次建着色器程序时的日志校验：在老 Intel 集显 + Metal 后端上
+   getProgramInfoLog 会同步阻塞几十毫秒，是"越来越卡/像在刷新"的元凶 */
+renderer.debug.checkShaderErrors = false;
+stage.appendChild(renderer.domElement);
+
+/* 显式给渲染器一个初始尺寸：之前依赖后面的 resize()，
+   但初始化顺序里那一次没跑到，画布会一直停在 300×150（画面糊、掉帧） */
+renderer.setSize(innerWidth, innerHeight, true);
+
+const scene = new THREE.Scene();
+if (!CFG.alpha) {
+  // 明亮的暖色渐变背景（上亮下暗），比原来纯深棕亮不少
+  const bgc = document.createElement('canvas');
+  bgc.width = 2; bgc.height = 256;
+  const bgx = bgc.getContext('2d');
+  const bgGrad = bgx.createLinearGradient(0, 0, 0, 256);
+  bgGrad.addColorStop(0, '#8a7660');
+  bgGrad.addColorStop(0.55, '#6a563f');
+  bgGrad.addColorStop(1, '#46362a');
+  bgx.fillStyle = bgGrad; bgx.fillRect(0, 0, 2, 256);
+  const bgTex = new THREE.CanvasTexture(bgc);
+  bgTex.colorSpace = THREE.SRGBColorSpace;
+  scene.background = bgTex;
+}
+scene.fog = new THREE.Fog(0x6a563f, 32, 62);
+
+const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 200);
+const controls = CFG.edit ? new OrbitControls(camera, renderer.domElement) : null;
+
+/* 环境反射：室内环境贴图，金属/玻璃才有细节；强度压低，保持暗调 */
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.32;
+
+/* ================= 画布纹理工具 ================= */
+function tex(w, h, draw) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+/* 木纹：底色 + 年轮 + 细纹，同时当凹凸 */
+const wood = tex(1024, 1024, (c, w, h) => {
+  c.fillStyle = '#5d3f28'; c.fillRect(0, 0, w, h);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < 240; i++) {
+    const y = rnd() * h;
+    c.strokeStyle = `rgba(${30 + rnd() * 40},${18 + rnd() * 26},${10 + rnd() * 18},${0.12 + rnd() * 0.2})`;
+    c.lineWidth = 0.6 + rnd() * 2.4;
+    c.beginPath();
+    for (let x = 0; x <= w; x += 24) c.lineTo(x, y + Math.sin(x / 90 + i) * 5 + rnd() * 3);
+    c.stroke();
+  }
+  for (let i = 0; i < 6; i++) {
+    const x = rnd() * w, y = rnd() * h, r = 18 + rnd() * 34;
+    for (let k = 0; k < 7; k++) {
+      c.strokeStyle = `rgba(38,22,12,${0.16 - k * 0.02})`;
+      c.lineWidth = 1.2;
+      c.beginPath(); c.ellipse(x, y, r + k * 7, (r + k * 7) * 0.55, 0.4, 0, Math.PI * 2); c.stroke();
+    }
+  }
+});
+wood.wrapS = wood.wrapT = THREE.RepeatWrapping;
+wood.repeat.set(2.4, 2.4);
+
+/* 墙面：粗糙灰泥，带一点暖色颗粒 */
+const plaster = tex(512, 512, (c, w, h) => {
+  c.fillStyle = '#2f2620'; c.fillRect(0, 0, w, h);
+  for (let i = 0; i < 14000; i++) {
+    const v = 18 + Math.random() * 46;
+    c.fillStyle = `rgba(${v + 22},${v + 14},${v + 8},${Math.random() * 0.5})`;
+    c.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+  }
+});
+plaster.wrapS = plaster.wrapT = THREE.RepeatWrapping;
+plaster.repeat.set(3, 2);
+
+/* 窗外日光：竖向渐变 + 树影 */
+const daylight = tex(256, 512, (c, w, h) => {
+  const g = c.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#8ea7b8'); g.addColorStop(0.55, '#d8d2b8'); g.addColorStop(1, '#6f7a63');
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
+  c.fillStyle = 'rgba(60,80,50,.5)';
+  for (let i = 0; i < 26; i++) c.beginPath(), c.arc(20 + Math.random() * w, h * 0.55 + Math.random() * h * 0.4, 12 + Math.random() * 34, 0, 7), c.fill();
+});
+daylight.wrapS = daylight.wrapT = THREE.RepeatWrapping;
+
+/* 传送带：细密横向条纹，滚动时才有“在动”的感觉 */
+const beltTex = tex(256, 64, (c, w, h) => {
+  c.fillStyle = '#2a2a28'; c.fillRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 8) {
+    c.fillStyle = x % 16 ? '#333330' : '#262624';
+    c.fillRect(x, 0, 4, h);
+  }
+  c.fillStyle = 'rgba(255,255,255,.05)'; c.fillRect(0, 6, w, 2); c.fillRect(0, h - 8, w, 2);
+});
+beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping;
+beltTex.repeat.set(16, 1);
+
+/* 上框（浅色石板）：打印原因 —— 礼物名 / 关注了主播 / 点赞连击 / 抽奖中奖 */
+function labelTex(reason) {
+  return tex(640, 176, (c, w, h) => {
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#c9ced2'); g.addColorStop(0.5, '#e3e6e8'); g.addColorStop(1, '#b7bdc2');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    /* 左上角高光 + 右下角暗边，做出石板的感觉 */
+    c.fillStyle = 'rgba(255,255,255,.5)';
+    c.beginPath(); c.moveTo(0, 0); c.lineTo(w * .45, 0); c.lineTo(0, h * .5); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(0,0,0,.10)';
+    c.beginPath(); c.moveTo(w, h); c.lineTo(w * .55, h); c.lineTo(w, h * .5); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(70,80,88,.45)'; c.lineWidth = 3; c.strokeRect(6, 6, w - 12, h - 12);
+    c.fillStyle = '#1d2a33'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const t = String(reason || '礼物').slice(0, 10);
+    let size = 108;
+    do { c.font = `800 ${size}px "PingFang SC","Microsoft YaHei",sans-serif`; if (c.measureText(t).width < w - 70) break; size -= 4; } while (size > 34);
+    c.fillText(t, w / 2, h / 2 + 6);
+  });
+}
+
+/* 下框（深色 LED 铭牌）：观众昵称，暗底金字 + 金框 + 两侧箭头 */
+function nameLedTex(name) {
+  return tex(1024, 192, (c, w, h) => {
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#241a10'); g.addColorStop(0.5, '#120c07'); g.addColorStop(1, '#1c130b');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.strokeStyle = 'rgba(245,194,107,.75)'; c.lineWidth = 5;
+    c.strokeRect(8, 8, w - 16, h - 16);
+    c.fillStyle = '#f5c26b';
+    c.beginPath(); c.moveTo(26, h / 2 - 16); c.lineTo(50, h / 2); c.lineTo(26, h / 2 + 16); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(w - 26, h / 2 - 16); c.lineTo(w - 50, h / 2); c.lineTo(w - 26, h / 2 + 16); c.closePath(); c.fill();
+    c.fillStyle = '#ffd76a'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.shadowColor = 'rgba(255,200,90,.7)'; c.shadowBlur = 16;
+    const t = String(name || '神秘观众').slice(0, 14);
+    let size = 136;
+    do { c.font = `800 ${size}px "PingFang SC","Microsoft YaHei",sans-serif`; if (c.measureText(t).width < w - 150) break; size -= 5; } while (size > 40);
+    c.fillText(t, w / 2, h / 2 + 6);
+    c.shadowBlur = 0;
+  });
+}
+
+/* 头像：失败就画一个渐变首字母，圆形的 */
+function avatarTex(url, name) {
+  return new Promise((resolve) => {
+    const make = (img) => {
+      const c = document.createElement('canvas'); c.width = c.height = 512;
+      const x = c.getContext('2d');
+      x.save();
+      x.beginPath(); x.arc(256, 256, 250, 0, 7); x.clip();
+      if (img) {
+        const s = Math.min(img.width, img.height);
+        x.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 6, 6, 500, 500);
+      } else {
+        const pals = [['#ffb284', '#c96f4a'], ['#a9b8f4', '#5a6fd6'], ['#91cbb1', '#4d927b'], ['#efa8b9', '#d16a86'], ['#e6bc6a', '#bd8f3a'], ['#ba9ee0', '#7e5cc0']];
+        let hsh = 0; for (const ch of String(name || '?')) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+        const p = pals[hsh % pals.length];
+        const g = x.createLinearGradient(0, 0, 512, 512);
+        g.addColorStop(0, p[0]); g.addColorStop(1, p[1]);
+        x.fillStyle = g; x.fillRect(0, 0, 512, 512);
+        x.fillStyle = '#fff'; x.font = '800 230px "PingFang SC","Microsoft YaHei",sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText([...(String(name || '?'))][0] || '?', 256, 276);
+      }
+      x.restore();
+      const grd = x.createRadialGradient(256, 210, 120, 256, 256, 270);
+      grd.addColorStop(0, 'rgba(255,255,255,.10)'); grd.addColorStop(1, 'rgba(0,0,0,.28)');
+      x.fillStyle = grd; x.beginPath(); x.arc(256, 256, 250, 0, 7); x.fill();
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      resolve(t);
+    };
+    if (!url) return make(null);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const timer = setTimeout(() => make(null), 4000);
+    img.onload = () => { clearTimeout(timer); make(img); };
+    img.onerror = () => { clearTimeout(timer); make(null); };
+    img.src = `/img?u=${encodeURIComponent(url)}`;
+  });
+}
+
+/* ================= 材质 ================= */
+const LOW_Q = CFG.quality === 'low';
+const Phys = (opts) => {
+  if (!LOW_Q) return new THREE.MeshPhysicalMaterial(opts);
+  const o = { ...opts };
+  delete o.clearcoat; delete o.clearcoatRoughness; delete o.sheen; delete o.sheenColor; delete o.sheenRoughness;
+  return new THREE.MeshStandardMaterial(o);
+};
+const M = {
+  wood: Phys({ map: wood, bumpMap: wood, bumpScale: 0.01, roughness: 0.42, clearcoat: 0.55, clearcoatRoughness: 0.22, color: 0xb98d63 }),
+  plaster: new THREE.MeshStandardMaterial({ map: plaster, roughness: 0.95, color: 0xbfb3a2 }),
+  black: new THREE.MeshPhysicalMaterial({ color: 0x2b2e33, metalness: 0.9, roughness: 0.32, clearcoat: 0.5 }),
+  silver: new THREE.MeshStandardMaterial({ color: 0xb9bfc7, metalness: 1, roughness: 0.22 }),
+  blue: new THREE.MeshPhysicalMaterial({ color: 0x2f6f8f, metalness: 0.55, roughness: 0.34, clearcoat: 0.5 }),
+  rubber: new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.9 }),
+  glass: new THREE.MeshPhysicalMaterial({ color: 0x0f1a1c, metalness: 0.2, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.6 }),
+  cream: new THREE.MeshStandardMaterial({ color: 0xd9cdb6, roughness: 0.82 }),
+  terra: new THREE.MeshStandardMaterial({ color: 0xa2603f, roughness: 0.85 }),
+  sage: new THREE.MeshStandardMaterial({ color: 0x5f7358, roughness: 0.9 }),
+  belt: new THREE.MeshStandardMaterial({ map: beltTex, roughness: 0.82 }),
+  brass: new THREE.MeshStandardMaterial({ color: 0xc69a4a, metalness: 1, roughness: 0.28 }),
+};
+
+/* ================= 场景搭建 ================= */
+function box(w, h, d, x, y, z, mat, parent = scene) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function cyl(r1, r2, h, x, y, z, mat, axis = 'y', parent = scene, seg = 16) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), mat);
+  m.position.set(x, y, z);
+  if (axis === 'x') m.rotation.z = Math.PI / 2;
+  if (axis === 'z') m.rotation.x = Math.PI / 2;
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+
+/* ---- 房间 ---- */
+const wallZ = -6.6;
+box(30, 16, 0.4, 0, 8, wallZ, M.plaster);
+box(34, 0.4, 20, 0, -0.22, -1, M.wood);                          // 地板
+const desk = box(20, 0.34, 13, 0.6, -0.17, 1.2, M.wood);          // 工作台
+
+/* 窗：窗框 + 日光 + 纱帘 */
+box(5.8, 6.2, 0.16, -4.6, 5.2, wallZ + 0.24, M.cream);
+const pane = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 5.6), new THREE.MeshBasicMaterial({ map: daylight }));
+pane.position.set(-4.6, 5.2, wallZ + 0.34); scene.add(pane);
+box(0.12, 5.6, 0.1, -4.6, 5.2, wallZ + 0.4, M.cream);
+box(5.2, 0.12, 0.1, -4.6, 5.2, wallZ + 0.4, M.cream);
+const curtainMat = new THREE.MeshStandardMaterial({ color: 0x8a7355, roughness: 1, transparent: true, opacity: 0.92 });
+for (const side of [-1, 1]) {
+  for (let i = 0; i < 6; i++) {
+    const fold = cyl(0.12, 0.12, 6.1, -4.6 + side * 3.05 + i * 0.09, 5.15, wallZ + 0.62, curtainMat, 'y');
+    fold.scale.z = 0.55;
+  }
+}
+cyl(0.05, 0.05, 7.4, -4.6, 8.3, wallZ + 0.62, M.brass, 'x');
+
+/* 后墙书架：几本书 + 备用线盘 */
+for (const y of [3.4, 5.6]) box(4.6, 0.16, 0.9, 4.6, y, wallZ + 1.1, M.wood);
+const bookCols = [0x8d6a4a, 0x5f6f5a, 0x9c5340, 0xb09a72, 0x6b7d90];
+for (let i = 0; i < 5; i++) {
+  const h = 0.7 + (i % 3) * 0.16;
+  box(0.22, h, 0.52, 3.1 + i * 0.32, 3.5 + h / 2, wallZ + 1.05, new THREE.MeshStandardMaterial({ color: bookCols[i], roughness: 0.9 }));
+}
+for (let i = 0; i < 3; i++) {
+  const x = 4.9 + i * 0.86;
+  cyl(0.36, 0.36, 0.22, x, 5.86, wallZ + 1.05, M.black, 'z');
+  cyl(0.29, 0.29, 0.24, x, 5.86, wallZ + 1.05, new THREE.MeshStandardMaterial({ color: [0xd8b26a, 0x7f9a9a, 0xc06a5a][i], roughness: 0.6 }), 'z');
+}
+
+/* 角落绿植：几片叶子，够撑气氛 */
+(function plant(x, y, z, s) {
+  const g = new THREE.Group(); g.position.set(x, y, z); g.scale.setScalar(s); scene.add(g);
+  cyl(0.36, 0.27, 0.56, 0, 0.28, 0, M.terra, 'y', g);
+  for (let i = 0; i < 9; i++) {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), M.sage);
+    const a = (i / 9) * Math.PI * 2;
+    leaf.position.set(Math.cos(a) * 0.26, 0.75 + (i % 4) * 0.22, Math.sin(a) * 0.26);
+    leaf.scale.set(0.7, 1.8, 0.28);
+    leaf.rotation.z = Math.cos(a) * 0.6; leaf.rotation.x = Math.sin(a) * 0.6;
+    leaf.castShadow = true; g.add(leaf);
+  }
+})(-8.4, 0, -3.4, 1.7);
+
+/* 桌上小物：杯子、本子、料盒 */
+cyl(0.24, 0.22, 0.5, 4.4, 0.25, -1.2, M.cream);
+cyl(0.2, 0.2, 0.04, 4.4, 0.49, -1.2, new THREE.MeshStandardMaterial({ color: 0x5a3a26, roughness: 0.8 }));
+const mugHandle = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.04, 10, 24), M.cream);
+mugHandle.position.set(4.66, 0.28, -1.2); mugHandle.rotation.y = Math.PI / 2; scene.add(mugHandle);
+box(1.1, 0.06, 0.78, 3.2, 0.03, 0.9, M.sage);
+box(0.95, 0.3, 0.66, 3.2, 0.2, 0.9, new THREE.MeshStandardMaterial({ color: 0x6b5a44, roughness: 0.85 }));
+
+/* ---- 打印机 ---- */
+const PX = -0.4;              // 打印机中心 x
+const BED_Y = 0.62;           // 打印床面高度，和传送带同高
+const machine = new THREE.Group();
+machine.position.set(PX, 0, 0.1);
+scene.add(machine);
+
+box(4.5, 0.34, 3.1, 0, 0.17, 0, M.black, machine);
+box(4.62, 0.08, 3.2, 0, 0.36, 0, M.silver, machine);
+/* 四根立柱 + 顶部横梁 */
+for (const x of [-2.06, 2.06]) for (const z of [-1.32, 1.32]) {
+  box(0.3, 4.5, 0.34, x, 2.6, z, M.black, machine);
+  box(0.36, 0.16, 0.4, x, 0.46, z, M.blue, machine);       // 脚座
+  cyl(0.045, 0.045, 4.2, x - 0.13, 2.7, z + 0.2, M.silver, 'y', machine);
+}
+box(4.6, 0.3, 0.34, 0, 4.45, -1.32, M.black, machine);
+box(4.6, 0.3, 0.34, 0, 4.45, 1.32, M.black, machine);
+box(0.34, 0.3, 3.0, -2.06, 4.45, 0, M.black, machine);
+box(0.34, 0.3, 3.0, 2.06, 4.45, 0, M.black, machine);
+
+/* 打印床：玻璃面 + 反光 */
+box(3.1, 0.14, 2.5, 0, BED_Y - 0.09, 0.1, M.black, machine);
+const bedGlass = new THREE.Mesh(new THREE.PlaneGeometry(2.95, 2.35), M.glass);
+bedGlass.rotation.x = -Math.PI / 2;
+bedGlass.position.set(0, BED_Y - 0.015, 0.1);
+bedGlass.receiveShadow = true;
+machine.add(bedGlass);
+/* 床面网格线 */
+const grid = new THREE.GridHelper(2.9, 18, 0x3f6d7c, 0x2b3d45);
+grid.position.set(0, BED_Y - 0.008, 0.1);
+grid.material.transparent = true; grid.material.opacity = 0.42;
+machine.add(grid);
+
+/* 龙门架：横梁随打印高度上下走，喷头挂在上面 */
+const gantry = new THREE.Group();
+gantry.position.set(0, 2.6, -0.94);
+machine.add(gantry);
+box(4.3, 0.2, 0.3, 0, 0, 0, M.silver, gantry);
+box(4.2, 0.08, 0.04, 0, -0.12, 0.16, M.rubber, gantry);
+for (const x of [-2.06, 2.06]) {
+  box(0.5, 0.62, 0.5, x, 0, 0.06, M.blue, gantry);
+  for (const dx of [-0.15, 0.15]) for (const dy of [-0.18, 0.18]) cyl(0.04, 0.04, 0.03, x + dx, dy, 0.31, M.silver, 'z', gantry);
+}
+const head = new THREE.Group();
+head.position.set(0, -0.1, 0.42);
+gantry.add(head);
+
+/* 打印头参考原版做法：倒角前面板 + 风扇护网 + 黄铜热端 + 锥形喷嘴 */
+/* 倒角面板：比纯方块更"机加工" */
+function chamferPanel(w, h, d, r, mat, parent, x, y, z) {
+  const sh = new THREE.Shape();
+  sh.moveTo(-w / 2 + r, -h / 2); sh.lineTo(w / 2 - r, -h / 2); sh.lineTo(w / 2, -h / 2 + r);
+  sh.lineTo(w / 2, h / 2 - r); sh.lineTo(w / 2 - r, h / 2); sh.lineTo(-w / 2 + r, h / 2);
+  sh.lineTo(-w / 2, h / 2 - r); sh.lineTo(-w / 2, -h / 2 + r); sh.closePath();
+  const m = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, steps: 1 }), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+/* 主体：蓝壳 + 上部黑罩 + 前脸倒角面板 */
+box(0.8, 0.78, 0.62, 0, 0, 0, M.blue, head);
+box(0.62, 0.4, 0.5, 0, 0.58, -0.06, M.black, head);
+chamferPanel(0.74, 0.72, 0.035, 0.06, M.blue, head, 0, 0, 0.31);
+/* 侧面导轨 */
+for (const x of [-0.33, 0.33]) box(0.018, 0.46, 0.02, x, 0, 0.345, M.silver, head);
+/* 风扇：护网 + 7 叶，转起来才像在工作 */
+const fan = new THREE.Group();
+fan.position.set(0, 0.02, 0.36);
+head.add(fan);
+const fanG = new THREE.Group();
+fan.add(fanG);
+for (let i = 0; i < 7; i++) {
+  const blade = box(0.075, 0.2, 0.012, 0, 0.105, 0, M.silver, fanG);
+  blade.rotation.z = (i * Math.PI * 2) / 7;
+  blade.position.set(Math.sin(blade.rotation.z) * 0.105, Math.cos(blade.rotation.z) * 0.105, 0);
+}
+cyl(0.055, 0.05, 0.05, 0, 0, 0.01, M.silver, 'z', fan);
+const fanRing = new THREE.Mesh(new THREE.TorusGeometry(0.225, 0.026, 10, 40), M.rubber);
+fanRing.position.z = 0.02;
+fan.add(fanRing);
+const fanSpin = fanG;
+/* 热端：黑散热块 + 黄铜加热块 + 倒锥喷嘴 */
+box(0.3, 0.22, 0.22, 0, -0.44, 0.06, M.rubber, head);
+cyl(0.1, 0.1, 0.18, 0, -0.6, 0.06, M.brass, 'y', head);
+const nozzleCone = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.16, 24), M.brass);
+nozzleCone.rotation.z = Math.PI;
+nozzleCone.position.set(0, -0.76, 0.06);
+nozzleCone.castShadow = true;
+head.add(nozzleCone);
+/* 喷嘴尖端就是火花/走位锚点 */
+const nozzleTip = new THREE.Object3D();
+nozzleTip.position.set(0, -0.84, 0.06);
+head.add(nozzleTip);
+const hotLight = new THREE.PointLight(0xffa347, 2.2, 3.2, 2);
+hotLight.position.set(0, -0.78, 0.08);
+head.add(hotLight);
+/* 顶部 4 个进料嘴 + 线管插头（料管跟着喷头走） */
+const filamentPorts = [];
+for (let i = 0; i < 4; i++) {
+  const px = -0.21 + i * 0.14;
+  const port = new THREE.Object3D();
+  port.position.set(px, 0.83, -0.08);
+  head.add(port);
+  filamentPorts.push(port);
+  cyl(0.05, 0.05, 0.1, px, 0.78, -0.08, M.silver, 'y', head);
+  cyl(0.036, 0.036, 0.035, px, 0.84, -0.08, M.rubber, 'y', head);
+}
+const harnessPort = new THREE.Object3D();
+harnessPort.position.set(0.3, 0.66, -0.25);
+head.add(harnessPort);
+cyl(0.085, 0.085, 0.2, 0.3, 0.56, -0.25, M.rubber, 'y', head);
+for (let y = 0.5; y < 0.67; y += 0.035) {
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.009, 5, 12), M.rubber);
+  ring.position.set(0.3, y, -0.25);
+  ring.rotation.x = Math.PI / 2;
+  head.add(ring);
+}
+
+/* 顶部料架 + 4 个线盘 */
+box(3.4, 0.16, 1.2, -0.4, 4.62, -1.32, M.black, machine);
+const spoolCols = [0x2f7fa8, 0xd8b23a, 0xc04a3a, 0x4e938c];
+const spools = [];
+const spoolTop = [];
+spoolCols.forEach((col, i) => {
+  const x = -1.7 + i * 0.72;
+  const g = new THREE.Group();
+  g.position.set(x, 5.02, -1.32);
+  g.rotation.y = Math.PI / 2;
+  machine.add(g);
+  cyl(0.42, 0.42, 0.16, 0, 0, 0, M.black, 'y', g);
+  cyl(0.34, 0.34, 0.2, 0, 0.02, 0, new THREE.MeshStandardMaterial({ color: col, roughness: 0.55 }), 'y', g);
+  cyl(0.12, 0.12, 0.24, 0, 0, 0, M.silver, 'y', g);
+  spools.push(g);
+  spoolTop.push(new THREE.Vector3(x, 5.02, -1.32));
+});
+
+/* 料管：料盘 -> 打印头。几何只建一次，之后每帧只更新顶点位置。
+   原来每 110ms dispose 再 new 一根 TubeGeometry，GC 和显存上传都在制造周期性微卡，
+   而且线管是"一段段跳"着跟喷头的。 */
+function makeTubeMesh(material, radius, radialSegments, tubularSegments) {
+  const rings = tubularSegments + 1, rad = radialSegments + 1;
+  const pos = new Float32Array(rings * rad * 3);
+  const nor = new Float32Array(rings * rad * 3);
+  const idx = [];
+  for (let i = 0; i < tubularSegments; i++) {
+    for (let j = 0; j < radialSegments; j++) {
+      const a = i * rad + j, b = (i + 1) * rad + j, c = (i + 1) * rad + j + 1, d = i * rad + j + 1;
+      idx.push(a, b, d, b, c, d);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  geo.setIndex(idx);
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = true;
+  mesh.frustumCulled = false;          // 顶点每帧都在变，别按初始包围球剔除
+  scene.add(mesh);
+  return {
+    mesh, geo, pos, nor, radius, rings, rad, radialSegments, tubularSegments,
+    pts: Array.from({ length: rings }, () => new THREE.Vector3()),
+  };
+}
+
+const _t = new THREE.Vector3(), _n = new THREE.Vector3(), _bn = new THREE.Vector3();
+/* 按曲线重算顶点；坐标架做平行移动，管子不会拧麻花。绕序/法线方向和 TubeGeometry 一致 */
+function updateTube(tube, curve) {
+  const { pos, nor, pts, rings, rad, radialSegments, tubularSegments, geo, radius } = tube;
+  for (let i = 0; i < rings; i++) curve.getPoint(i / tubularSegments, pts[i]);
+  _t.subVectors(pts[1], pts[0]).normalize();
+  _n.set(0, 1, 0);
+  if (Math.abs(_t.y) > 0.9) _n.set(1, 0, 0);
+  _n.addScaledVector(_t, -_t.dot(_n)).normalize();
+  let o = 0;
+  for (let i = 0; i < rings; i++) {
+    const a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, rings - 1)];
+    _t.subVectors(b, a).normalize();
+    if (_t.lengthSq() < 1e-8) _t.set(0, 1, 0);
+    _n.addScaledVector(_t, -_t.dot(_n));
+    if (_n.lengthSq() < 1e-6) {              // 极端情况下退化，兜一下，别把 NaN 写进顶点
+      _n.set(0, 1, 0);
+      if (Math.abs(_t.y) > 0.9) _n.set(1, 0, 0);
+      _n.addScaledVector(_t, -_t.dot(_n));
+    }
+    _n.normalize();
+    _bn.crossVectors(_t, _n).normalize();
+    for (let j = 0; j <= radialSegments; j++) {
+      const ang = (j / radialSegments) * Math.PI * 2;
+      const s = Math.sin(ang), c = -Math.cos(ang);
+      const nx = c * _n.x + s * _bn.x, ny = c * _n.y + s * _bn.y, nz = c * _n.z + s * _bn.z;
+      pos[o] = pts[i].x + radius * nx; nor[o] = nx;
+      pos[o + 1] = pts[i].y + radius * ny; nor[o + 1] = ny;
+      pos[o + 2] = pts[i].z + radius * nz; nor[o + 2] = nz;
+      o += 3;
+    }
+  }
+  geo.attributes.position.needsUpdate = true;
+  geo.attributes.normal.needsUpdate = true;
+}
+
+const hoseMats = spoolCols.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55 }));
+const hoses = hoseMats.map((m) => makeTubeMesh(m, 0.024, 6, 22));
+const cable = makeTubeMesh(M.rubber, 0.06, 8, 20);
+/* 曲线对象和控制点都复用，每帧只改数值，不再 new Vector3 */
+const hoseCurves = hoses.map(() => new THREE.CatmullRomCurve3([
+  new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(),
+]));
+const cableCurve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-2.2, 4.7, -0.6), new THREE.Vector3(-1.2, 4.4, -0.9),
+  new THREE.Vector3(), new THREE.Vector3(),
+]);
+const hoseEnds = filamentPorts.map(() => new THREE.Vector3());
+const harnessEnd = new THREE.Vector3();
+
+function updateHoses() {
+  for (let i = 0; i < filamentPorts.length; i++) filamentPorts[i].getWorldPosition(hoseEnds[i]);
+  harnessPort.getWorldPosition(harnessEnd);
+  for (let i = 0; i < hoses.length; i++) {
+    const t = hoseEnds[i], spool = spoolTop[i], cv = hoseCurves[i];
+    cv.points[0].set(spool.x, spool.y + 0.35, spool.z);
+    cv.points[1].set(spool.x - 0.15, spool.y + 1.3 + i * 0.05, spool.z + 0.15);
+    cv.points[2].set(-0.6, Math.max(t.y + 1.0, spool.y + 0.9), -0.9);
+    cv.points[3].set(t.x, t.y + 0.42, t.z);
+    cv.points[4].copy(t);
+    updateTube(hoses[i], cv);
+  }
+  cableCurve.points[1].y = Math.max(harnessEnd.y + 1.2, 4.4);
+  cableCurve.points[2].set(harnessEnd.x, harnessEnd.y + 0.4, harnessEnd.z);
+  cableCurve.points[3].copy(harnessEnd);
+  updateTube(cable, cableCurve);
+}
+
+/* 前脸铭牌条 */
+const ledStrip = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.13), new THREE.MeshBasicMaterial({ color: 0x2a6a7a }));
+ledStrip.position.set(0, 0.34, 1.56);
+machine.add(ledStrip);
+
+/* ---- 传送带 ---- */
+const BELT = { z: 2.9, y: BED_Y - 0.02, x0: -3.6, x1: 9.6 };
+const BELT_SPEED = 1.35;      // 奖杯跟着皮带往右走的线速度
+const BELT_PLACE_X = PX - 2.0;   // 新作品落在传送带最左边
+const beltLen = BELT.x1 - BELT.x0, beltMid = (BELT.x0 + BELT.x1) / 2;
+box(beltLen, 0.28, 1.7, beltMid, BELT.y - 0.24, BELT.z, M.black);
+const beltTop = new THREE.Mesh(new THREE.PlaneGeometry(beltLen, 1.5), M.belt);
+beltTop.rotation.x = -Math.PI / 2;
+beltTop.position.set(beltMid, BELT.y - 0.005, BELT.z);
+beltTop.receiveShadow = true;
+scene.add(beltTop);
+const rollers = [];
+for (const x of [BELT.x0 + 0.2, BELT.x1 - 0.2]) {
+  const r = cyl(0.2, 0.2, 1.56, x, BELT.y - 0.1, BELT.z, M.silver, 'z');
+  rollers.push(r);
+}
+box(beltLen, 0.1, 0.14, beltMid, BELT.y + 0.02, BELT.z + 0.86, M.silver);
+box(beltLen, 0.1, 0.14, beltMid, BELT.y + 0.02, BELT.z - 0.86, M.silver);
+for (let x = BELT.x0; x < BELT.x1; x += 1.9) {
+  for (const z of [BELT.z - 0.8, BELT.z + 0.8]) cyl(0.05, 0.05, 1.3, x, 0, z, M.silver);
+}
+
+/* ---- 取件机械臂：把打好的奖牌抓到传送带上 ---- */
+const ARM = {
+  base: new THREE.Vector3(-3.0, 0, 1.9),   // 底座：打印机左前方、传送带旁
+  shoulderY: 1.6,
+  L1: 2.1, L2: 2.0,                        // 上臂 / 前臂长度
+  home: new THREE.Vector3(-3.0, 2.6, 1.2), // 待机时夹爪悬停点
+};
+const armRoot = new THREE.Group();
+armRoot.position.copy(ARM.base);
+scene.add(armRoot);
+cyl(0.46, 0.54, 0.24, 0, 0.12, 0, M.black, 'y', armRoot);
+cyl(0.26, 0.3, ARM.shoulderY - 0.24, 0, (ARM.shoulderY + 0.24) / 2, 0, M.silver, 'y', armRoot);
+const armYaw = new THREE.Group();
+armYaw.position.set(0, ARM.shoulderY, 0);
+armRoot.add(armYaw);
+const armShoulder = new THREE.Group();
+armYaw.add(armShoulder);
+cyl(0.22, 0.22, 0.46, 0, 0, 0, M.black, 'x', armShoulder, 20);      // 肩关节
+box(0.26, ARM.L1, 0.34, 0, ARM.L1 / 2, 0, M.silver, armShoulder);   // 上臂
+const armElbow = new THREE.Group();
+armElbow.position.set(0, ARM.L1, 0);
+armShoulder.add(armElbow);
+cyl(0.18, 0.18, 0.38, 0, 0, 0, M.black, 'x', armElbow, 18);         // 肘关节
+box(0.22, ARM.L2, 0.3, 0, ARM.L2 / 2, 0, M.silver, armElbow);       // 前臂
+const armWrist = new THREE.Group();
+armWrist.position.set(0, ARM.L2, 0);
+armElbow.add(armWrist);
+box(0.36, 0.2, 0.3, 0, 0.02, 0, M.black, armWrist);                 // 腕部
+box(0.07, 0.42, 0.14, -0.21, 0.32, 0, M.brass, armWrist);           // 左指
+box(0.07, 0.42, 0.14, 0.21, 0.32, 0, M.brass, armWrist);            // 右指
+const armTarget = ARM.home.clone();
+
+/* 两连杆 IK：给定末端目标，反推肩/肘角度；腕部反向补偿让夹爪始终垂直朝下 */
+function solveArm(target) {
+  const dx = target.x - ARM.base.x;
+  const dz = target.z - ARM.base.z;
+  const d = Math.hypot(dx, dz);
+  const dy = target.y - ARM.shoulderY;
+  armYaw.rotation.y = Math.atan2(dx, dz);
+  const r = Math.min(Math.hypot(d, dy), ARM.L1 + ARM.L2 - 0.03);
+  const cosE = (r * r - ARM.L1 * ARM.L1 - ARM.L2 * ARM.L2) / (2 * ARM.L1 * ARM.L2);
+  const theta2 = Math.acos(Math.max(-1, Math.min(1, cosE)));
+  const theta1 = Math.atan2(d, dy) - Math.atan2(ARM.L2 * Math.sin(theta2), ARM.L1 + ARM.L2 * Math.cos(theta2));
+  armShoulder.rotation.x = theta1;
+  armElbow.rotation.x = theta2;
+  armWrist.rotation.x = Math.PI - (theta1 + theta2);
+}
+const easeIO = (t) => t * t * (3 - 2 * t);
+solveArm(armTarget);
+
+/* ================= 灯光 ================= */
+scene.add(new THREE.HemisphereLight(0xffdfba, 0x2a2018, 1.05));
+const key = new THREE.DirectionalLight(0xffe3bd, 2.6);
+key.position.set(-7, 13, 9);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);   // 集显上 2048 太重，1024 已经够看
+key.shadow.autoUpdate = false;
+key.shadow.needsUpdate = true;
+key.shadow.camera.left = -14; key.shadow.camera.right = 14;
+key.shadow.camera.top = 14; key.shadow.camera.bottom = -10;
+key.shadow.camera.near = 1; key.shadow.camera.far = 40;
+key.shadow.bias = -0.0008;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0x9fc2ff, 1.0);
+fill.position.set(11, 6, 7);
+fill.castShadow = false;
+scene.add(fill);
+/* 后墙补光：把背景墙打亮一点，整体更明亮 */
+const wallWash = new THREE.DirectionalLight(0xffe8cf, 1.1);
+wallWash.position.set(3, 9, 11);
+wallWash.target.position.set(2, 4, -6.6);
+wallWash.castShadow = false;
+scene.add(wallWash, wallWash.target);
+const rim = new THREE.DirectionalLight(0x9fd0ff, 1.5);
+rim.position.set(2, 7, -9);
+rim.castShadow = false;
+scene.add(rim);
+const spot = new THREE.SpotLight(0xffd9a8, 55, 26, 0.62, 0.65, 1.4);
+spot.position.set(1.2, 10.5, 6.5);
+spot.target.position.set(PX, 1.8, 0.3);
+spot.castShadow = false;
+scene.add(spot, spot.target);
+
+/* 机身后面的暖光晕，压出层次 */
+const glowTex = tex(256, 256, (c, w, h) => {
+  const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  g.addColorStop(0, 'rgba(255,190,120,.55)');
+  g.addColorStop(0.45, 'rgba(255,150,80,.16)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
+});
+const glow = new THREE.Mesh(new THREE.PlaneGeometry(11, 8), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+glow.position.set(PX + 0.4, 3.4, -4.6);
+scene.add(glow);
+
+/* ================= 相机：全景 ↔ 特写，自动切换 ================= */
+const BASE_CAM = {
+  landscape: { pos: [9.3, 6.7, 16.0], target: [1.0, 1.95, 1.4], fov: 34 },
+  portrait: { pos: [0.8, 6.7, 19.0], target: [-0.5, 1.75, 1.0], fov: 44 },
+};
+const CLOSE_CAM = {
+  // 特写：从右前方贴近打印床，奖牌和铭牌都看得清
+  landscape: { pos: [4.6, 3.3, 9.4], target: [0.35, 1.42, 0.4], fov: 31 },
+  portrait: { pos: [2.6, 3.6, 10.2], target: [-0.4, 1.45, 0.4], fov: 44 },
+};
+const camView = { mode: 'overview', t: 0, from: null, to: null };   // t: 0=全景 1=特写（默认必须从全景开始）
+let forcedOrient = '';   // 手动锁定的画面方向：'' 自动 / landscape / portrait
+try { forcedOrient = localStorage.getItem('studio-orient') || ''; } catch (e) {}
+if (params.get('orient') === 'land' || params.get('orient') === 'landscape') forcedOrient = 'landscape';
+if (params.get('orient') === 'portrait' || params.get('orient') === 'port') forcedOrient = 'portrait';
+
+function orient() {
+  if (forcedOrient) return forcedOrient;
+  return innerHeight >= innerWidth ? 'portrait' : 'landscape';
+}
+let beltCloseCam = null;   // 礼物上台后的临时特写机位（对准传送带上刚放好的奖杯）
+let beltFocusProd = null;  // 特写正在拍的那件作品，跟着传送带移动
+let beltFocusToken = 0;
+function camPresets() {
+  const o = orient();
+  return { overview: BASE_CAM[o], close: beltCloseCam || CLOSE_CAM[o] };
+}
+
+function applyCam() {
+  const P = camPresets();
+  const a = P.overview, b = P.close;
+  const t = camView.t;
+  const e = t * t * (3 - 2 * t);       // 平滑
+  const pos = new THREE.Vector3().lerpVectors(new THREE.Vector3(...a.pos), new THREE.Vector3(...b.pos), e);
+  const look = new THREE.Vector3().lerpVectors(new THREE.Vector3(...a.target), new THREE.Vector3(...b.target), e);
+  camera.position.copy(pos);
+  camera.lookAt(look);
+  camera.fov = (a.fov || 34) + ((b.fov || 34) - (a.fov || 34)) * e;
+  camera.updateProjectionMatrix();
+}
+function setView(mode, instant) {
+  camView.mode = mode;
+  if (mode === 'overview') { beltCloseCam = null; beltFocusProd = null; }
+  if (instant) { camView.t = mode === 'close' ? 1 : 0; camView.moving = false; applyCam(); return; }
+  camView.moveTo = mode === 'close' ? 1 : 0;
+  camView.moving = true;
+}
+function stepCam(dt) {
+  if (!camView.moving) return;
+  const target = camView.moveTo;
+  const dir = Math.sign(target - camView.t);
+  camView.t = Math.min(1, Math.max(0, camView.t + dir * dt * 1.35));
+  if (camView.t === target) camView.moving = false;
+  applyCam();
+}
+
+function resizeCamera(w, h) {
+  camera.aspect = w / h;
+  if (CFG.edit) { camera.updateProjectionMatrix(); return; }
+  applyCam();
+}
+/* 渲染尺寸统一入口。给 canvas.width/height 赋同一个值也会清空画布，
+   OBS 里 resize 事件一多（切场景/改源大小）就会莫名白闪一次，所以尺寸没变就不碰。 */
+let lastW = 0, lastH = 0;
+function setCanvasSize(w, h) {
+  if (w === lastW && h === lastH) return;
+  lastW = w; lastH = h;
+  renderer.setSize(w, h, true);
+}
+function relayout() {
+  if (!CFG.edit && forcedOrient) return applyAspect();
+  setCanvasSize(innerWidth, innerHeight);
+  resizeCamera(innerWidth, innerHeight);
+}
+function resize() {
+  if (!CFG.edit && forcedOrient) return applyAspect();
+  setCanvasSize(innerWidth, innerHeight);
+  resizeCamera(innerWidth, innerHeight);
+}
+addEventListener('resize', resize);
+
+/* 初始化：按当前窗口 / 锁定方向切一次相机和画布（之前这一步丢了，相机停在原点） */
+resize();
+if (CFG.edit) {
+  controls.enableDamping = true;
+  controls.maxPolarAngle = Math.PI / 2 - 0.02;
+  controls.minDistance = 5;
+  controls.maxDistance = 40;
+  controls.target.set(...BASE_CAM.landscape.target);
+  controls.update();
+}
+
+/* 手动切横竖屏：把 3D 画面固定成 16:9 或 9:16，两边补黑边（OBS 里最稳）
+   自动模式则铺满整个窗口 */
+function applyAspect() {
+  if (CFG.alpha) stage.dataset.clear = '1'; else stage.dataset.clear = '';
+  if (CFG.edit || !forcedOrient) { stage.dataset.lock = ''; resize(); return; }
+  stage.dataset.lock = forcedOrient;
+  const ratio = forcedOrient === 'portrait' ? 9 / 16 : 16 / 9;
+  const vw = innerWidth, vh = innerHeight;
+  let w = vw, h = vw / ratio;
+  if (h > vh) { h = vh; w = vh * ratio; }
+  w = Math.round(w); h = Math.round(h);
+  setCanvasSize(w, h);                 // 画布本身就只有这么宽，剩下的由背景补
+  camera.aspect = ratio;
+  camera.updateProjectionMatrix();
+  applyCam();
+}
+
+/* ================= 打印件（相框勋章） ================= */
+const PRINT_H = 2.5;   // 从床面算起的打印高度
+/* 每件作品一个裁剪面：随着打印高度往上抬，材料就“长”出来 */
+function makeProduct(job, avatar) {
+  const g = new THREE.Group();
+  const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+  const tier = job.tier;   // 0..3
+  const porcelainCol = [0xa87a4e, 0xb9c6cc, 0x3a3f42, 0xd9d2c2][tier];
+  const porcelain = Phys({
+    color: porcelainCol,
+    metalness: [0.05, 0.55, 0.2, 0.1][tier],
+    roughness: [0.45, 0.28, 0.3, 0.3][tier],
+    clearcoat: [0.4, 0.6, 0.6, 0.7][tier],
+    clearcoatRoughness: 0.2,
+    clippingPlanes: [clipPlane],
+    clipShadows: true,
+  });
+  if (tier === 0) { porcelain.map = wood; porcelain.map.needsUpdate = true; }
+  const rimMat = Phys({
+    color: [0xb07a44, 0xd6dde2, 0xbfc6cb, 0xe9c169][tier],
+    metalness: 1, roughness: 0.2, envMapIntensity: 1.8,
+    clippingPlanes: [clipPlane], clipShadows: true,
+  });
+  const add = (mesh) => { mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh); return mesh; };
+
+  /* 基座：勋章托座（上块）+ 基座（下块），两块正脸分别放"打印原因"和"观众昵称" */
+  const base = add(new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.38, 0.92), porcelain));
+  base.position.set(0, 0.19, 0);
+  /* 托座：承载勋章，正脸就是上面那个红框 */
+  const plinth = add(new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.56, 0.6), porcelain));
+  plinth.position.set(0, 0.66, -0.12);
+
+  /* ===== 两个标签（对应你画的两个红框）=====
+     上框：托座正面的浅色斜切石板 —— 写"打印原因"（礼物名 / 关注了主播 / 点赞连击…）
+     下框：基座正面的深色 LED 铭牌 —— 写观众昵称
+     （这个摆法是照参考项目的样子调的：上浅下深，短的在上、长的在下） */
+
+  /* 上框：托座正面那块斜切石板 */
+  const capW = 1.5, capH = 0.4;
+  const capY = 0.68, capZ = 0.205, capTilt = -0.1;
+  const capSlab = add(new THREE.Mesh(new THREE.BoxGeometry(capW, capH, 0.055), porcelain));
+  capSlab.position.set(0, capY, capZ);
+  capSlab.rotation.x = capTilt;
+  const reasonTex = labelTex(job.reasonText || job.giftText || '礼物');
+  const capFace = add(new THREE.Mesh(new THREE.PlaneGeometry(capW - 0.06, capH - 0.06), new THREE.MeshStandardMaterial({
+    map: reasonTex, roughness: 0.62, metalness: 0.03,
+    clippingPlanes: [clipPlane], clipShadows: true,
+  })));
+  capFace.position.set(0, capY, capZ + 0.034);
+  capFace.rotation.x = capTilt;
+
+  /* 下框：基座正面那条深色 LED 铭牌（金框 + 两侧箭头，写昵称） */
+  const nameW = 1.78, nameH = 0.32;
+  const nameY = 0.19, nameZ = 0.462;
+  const nameStrip = add(new THREE.Mesh(new THREE.BoxGeometry(nameW + 0.06, nameH + 0.06, 0.04), rimMat));
+  nameStrip.position.set(0, nameY, nameZ - 0.012);
+  const nameFace = new THREE.Mesh(new THREE.PlaneGeometry(nameW, nameH), new THREE.MeshStandardMaterial({
+    map: nameLedTex(job.name), roughness: 0.42, metalness: 0.1,
+    emissive: 0xffd89a, emissiveIntensity: 0.05,
+    clippingPlanes: [clipPlane], clipShadows: true,
+  }));
+  nameFace.position.set(0, nameY, nameZ + 0.014);
+  g.add(nameFace);
+
+
+  /* 勋章框：贴着立柱顶 */
+  const R = 0.62, MEDAL_Y = 1.0 + R;        // 框底 = 立柱顶 1.0
+  const frame = add(new THREE.Mesh(new THREE.CylinderGeometry(tier === 2 ? 0.68 : 0.645, tier === 2 ? 0.68 : 0.645, 0.2, tier === 2 ? 8 : 64), rimMat));
+  frame.rotation.x = Math.PI / 2;
+  frame.position.set(0, MEDAL_Y, -0.1);
+  /* 框内衬圈：压暗一圈，头像才突出 */
+  const inset = add(new THREE.Mesh(new THREE.TorusGeometry(R + 0.04, 0.028, 14, 64), new THREE.MeshStandardMaterial({
+    color: 0x1d2023, metalness: 0.5, roughness: 0.5, clippingPlanes: [clipPlane], clipShadows: true,
+  })));
+  inset.position.set(0, MEDAL_Y, 0.0);
+  /* 头像 */
+  /* 头像用不受光照影响的材质 + 跳过色调映射，颜色更饱和 */
+  const faceMat = new THREE.MeshBasicMaterial({ map: avatar, clippingPlanes: [clipPlane], clipShadows: true });
+  faceMat.toneMapped = false;
+  const face = add(new THREE.Mesh(new THREE.CircleGeometry(R, 64), faceMat));
+  face.position.set(0, MEDAL_Y, 0.014);
+  /* 覆盖的玻璃：只留一点点反光，别糊住头像 */
+  const coverMat = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.07,
+    clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 0.6, depthWrite: false, clippingPlanes: [clipPlane],
+  });
+  const cover = new THREE.Mesh(new THREE.CircleGeometry(R, 64), coverMat);
+  cover.position.set(0, MEDAL_Y, 0.05);
+  g.add(cover);
+  /* 完稿时扫过一道反光 */
+  const glintMat = new THREE.MeshBasicMaterial({ color: 0xfff6e2, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, clippingPlanes: [clipPlane] });
+  const glint = new THREE.Mesh(new THREE.PlaneGeometry(0.2, R * 2.1), glintMat);
+  glint.position.set(-R - 0.4, MEDAL_Y, 0.062);
+  glint.rotation.z = 0.36;
+  g.add(glint);
+
+  /* 大礼：金边 */
+  if (tier === 3) {
+    const ring = add(new THREE.Mesh(new THREE.TorusGeometry(R + 0.085, 0.022, 12, 72), rimMat));
+    ring.position.set(0, MEDAL_Y, 0.02);
+  }
+  /* 礼物奖杯都戴皇冠，皇冠大小跟着奖杯档位走 */
+  if (job.source === 'gift') {
+    const cs = ({ sm: 0.78, md: 0.9, lg: 1.0, xl: 1.12 })[job.size] || 1;
+    const crown = new THREE.Group();
+    crown.position.set(0, MEDAL_Y + R + 0.22 * cs, -0.02);
+    crown.scale.setScalar(cs);
+    g.add(crown);
+    const crownMat = new THREE.MeshPhysicalMaterial({ color: 0xf0c86a, metalness: 1, roughness: 0.16, envMapIntensity: 2, clippingPlanes: [clipPlane], clipShadows: true });
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.11, 24), crownMat);
+    base.castShadow = true; crown.add(base);
+    for (let i = 0; i < 6; i++) {
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.24, 8), crownMat);
+      const a = (i / 6) * Math.PI * 2;
+      spike.position.set(Math.cos(a) * 0.23, 0.16, Math.sin(a) * 0.23);
+      spike.castShadow = true; crown.add(spike);
+    }
+  }
+  if (tier >= 2) {
+    const rim2 = add(new THREE.Mesh(new THREE.TorusGeometry(R + 0.025, 0.014, 12, 72), rimMat));
+    rim2.position.set(0, MEDAL_Y, 0.03);
+  }
+
+  /* 尺寸：礼物按价值分档；点赞/关注/分享/666 固定 0.75；抽奖（幸运观众）按中档再收一点 */
+  const size = SIZE_SCALE[job.size] || 1;
+  const scale = job.source === 'gift'
+    ? size
+    : (job.source === 'lottery' ? size * 0.9 : 0.75);
+  /* 几何本身按尺寸放大/缩小；打印高度也跟着变，喷头才追得上最后一层 */
+  g.scale.setScalar(scale);
+  return {
+    group: g, plane: clipPlane, porcelain, rimMat, cover, coverMat, glint, glintMat, faceMat,
+    scale, printH: PRINT_H * scale,
+  };
+}
+
+/* ================= 粒子：喷头火花 ================= */
+const SPARK_N = 90;
+const sparkPos = new Float32Array(SPARK_N * 3);
+for (let i = 0; i < SPARK_N; i++) sparkPos[i * 3 + 1] = -999;
+const sparkLife = new Float32Array(SPARK_N);
+const sparkVel = new Float32Array(SPARK_N * 3);
+const sparkGeo = new THREE.BufferGeometry();
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+const sparkMat = new THREE.PointsMaterial({ color: 0xffc06a, size: 0.05, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+const sparks = new THREE.Points(sparkGeo, sparkMat);
+scene.add(sparks);
+const nozzleWorld = new THREE.Vector3();
+function emitSpark() {
+  for (let i = 0; i < SPARK_N; i++) {
+    if (sparkLife[i] > 0) continue;
+    sparkLife[i] = 0.35 + Math.random() * 0.35;
+    sparkPos[i * 3] = nozzleWorld.x + (Math.random() - 0.5) * 0.05;
+    sparkPos[i * 3 + 1] = nozzleWorld.y + Math.random() * 0.03;
+    sparkPos[i * 3 + 2] = nozzleWorld.z + (Math.random() - 0.5) * 0.05;
+    sparkVel[i * 3] = (Math.random() - 0.5) * 0.5;
+    sparkVel[i * 3 + 1] = 0.25 + Math.random() * 0.5;
+    sparkVel[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+    return;
+  }
+}
+function updateSparks(dt) {
+  let alive = false;
+  for (let i = 0; i < SPARK_N; i++) {
+    if (sparkLife[i] <= 0) { sparkPos[i * 3 + 1] = -999; continue; }
+    alive = true;
+    sparkLife[i] -= dt;
+    sparkPos[i * 3] += sparkVel[i * 3] * dt;
+    sparkPos[i * 3 + 1] += sparkVel[i * 3 + 1] * dt;
+    sparkPos[i * 3 + 2] += sparkVel[i * 3 + 2] * dt;
+    sparkVel[i * 3 + 1] -= dt * 1.6;
+  }
+  sparkGeo.attributes.position.needsUpdate = true;
+  sparkMat.opacity = alive ? 0.9 : 0;
+}
+
+/* ================= 打印音效 ================= */
+// 放了 public/printer.mp3 就用真实录音循环；没有就退回合成的 FDM 打印机声
+const realSfx = new Audio('/printer.mp3');
+realSfx.loop = true;
+realSfx.preload = 'auto';
+realSfx.volume = 0.75;
+let realSfxOk = false;
+fetch('/printer.mp3', { method: 'HEAD' }).then((r) => { realSfxOk = r.ok; }).catch(() => {});
+
+let actx = null;
+let printSfx = null;
+function audioCtx() {
+  if (!actx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try { actx = new AC(); } catch (e) { return null; }
+  }
+  if (actx.state === 'suspended') actx.resume().catch(() => {});
+  return actx;
+}
+// 浏览器要求先有用户操作才能出声：点/触摸/按键时顺手解锁
+addEventListener('pointerdown', () => audioCtx(), { passive: true });
+addEventListener('keydown', () => audioCtx());
+function noiseBuffer(ctx) {
+  const len = Math.floor(ctx.sampleRate * 0.5);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+function startPrintSound() {
+  if (!CFG.sfx || printSfx) return;
+  if (realSfxOk) {
+    printSfx = { real: true };
+    try { realSfx.currentTime = 0; } catch (e) {}
+    realSfx.play().catch(() => {
+      if (printSfx && printSfx.real) { printSfx = null; synthPrintSound(); }
+    });
+    return;
+  }
+  synthPrintSound();
+}
+function synthPrintSound() {
+  if (printSfx) return;
+  const ctx = audioCtx();
+  if (!ctx) return;
+  if (ctx.state !== 'running') {
+    // 被浏览器自动播放策略拦着：等一次用户操作解锁后，如果还在打印就补上声音
+    ctx.resume().catch(() => {});
+    setTimeout(() => { if (ctx.state === 'running' && phase === 'print' && !printSfx) synthPrintSound(); }, 250);
+    return;
+  }
+  const now = ctx.currentTime;
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, now);
+  master.gain.exponentialRampToValueAtTime(0.9, now + 0.3);
+  master.connect(ctx.destination);
+
+  // 风扇：低频宽的呼呼声
+  const fan = ctx.createBufferSource();
+  fan.buffer = noiseBuffer(ctx); fan.loop = true;
+  const fanLp = ctx.createBiquadFilter();
+  fanLp.type = 'lowpass'; fanLp.frequency.value = 900;
+  const fanGain = ctx.createGain(); fanGain.gain.value = 0.05;
+  fan.connect(fanLp).connect(fanGain).connect(master);
+
+  // 步进电机高频啸叫：两个稍微失谐的锯齿波
+  const whine = ctx.createOscillator();
+  whine.type = 'sawtooth'; whine.frequency.value = 470;
+  const whine2 = ctx.createOscillator();
+  whine2.type = 'sawtooth'; whine2.frequency.value = 611;
+  const whineBp = ctx.createBiquadFilter();
+  whineBp.type = 'bandpass'; whineBp.frequency.value = 1300; whineBp.Q.value = 1.6;
+  const whineGain = ctx.createGain(); whineGain.gain.value = 0.018;
+  whine.connect(whineBp); whine2.connect(whineBp);
+  whineBp.connect(whineGain).connect(master);
+
+  // 喷头走位的短促“吱”声：随机触发、带下滑音
+  const blip = () => {
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(700 + Math.random() * 900, t);
+    o.frequency.exponentialRampToValueAtTime(260 + Math.random() * 200, t + 0.08);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.035, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    o.connect(g).connect(master);
+    o.start(t); o.stop(t + 0.18);
+  };
+  const timer = setInterval(blip, 450 + Math.random() * 300);
+
+  fan.start(); whine.start(); whine2.start();
+  printSfx = { ctx, master, nodes: [fan, whine, whine2], timer };
+}
+function stopPrintSound() {
+  const s = printSfx;
+  if (!s) return;
+  printSfx = null;
+  if (s.real) { try { realSfx.pause(); realSfx.currentTime = 0; } catch (e) {} return; }
+  clearInterval(s.timer);
+  const now = s.ctx.currentTime;
+  s.master.gain.cancelScheduledValues(now);
+  s.master.gain.setValueAtTime(Math.max(0.0001, s.master.gain.value), now);
+  s.master.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+  setTimeout(() => {
+    for (const n of s.nodes) { try { n.stop(); } catch (e) {} }
+    try { s.master.disconnect(); } catch (e) {}
+  }, 600);
+}
+
+/* ================= 打印任务 ================= */
+const queue = [];
+const beltItems = [];
+let currentJob = null;       // { job, prod, phase, t, duration }
+let lastFrame = performance.now();
+let phase = 'idle';
+let printing = false;
+let counters = { coin: 0, printed: 0, gifts: 0 };
+let online = null;
+let seq = 0;
+const comboIndex = new Map();
+const recentUsers = new Map();
+const seen = new Set();
+const socialGuard = new Map();
+// 最近见过的礼物（礼物名 -> 奖杯大小），给 /stats 说明"送什么礼物 → 几号奖杯"
+const giftSizes = new Map();
+const SIZE_RANK = { sm: 0, md: 1, lg: 2, xl: 3 };
+function noteGift(ev) {
+  const g = (ev && ev.gift) || {};
+  if (!g.name) return;
+  const total = (Number(g.diamond) || 0) * Math.max(1, Number(ev.count) || 1);
+  const size = sizeOf(total);
+  const prev = giftSizes.get(g.name);
+  if (!prev || SIZE_RANK[size] > SIZE_RANK[prev.size]) giftSizes.set(g.name, { gift: g.name, size, ts: Date.now() });
+  else prev.ts = Date.now();
+}
+function giftSizeRows() {
+  const cut = Date.now() - 3 * 3600 * 1000;
+  return [...giftSizes.values()].filter((x) => x.ts >= cut)
+    .sort((a, b) => SIZE_RANK[a.size] - SIZE_RANK[b.size]).slice(0, 6)
+    .map((x) => ({ gift: x.gift, size: x.size }));
+}
+let likeCarry = 0, likeTimer = null, lastLikeJobAt = 0, likeThanks = 0;
+const likeCounts = new Map();   // 观众 -> 累计点赞：按人计数，谁的连击够了就打谁的奖牌
+let last666At = 0;   // 评论 666 隐藏彩蛋的全局冷却，防止刷屏
+let camHoldUntil = 0;
+let camManualUntil = 0;
+let lotteryNext = 0, lastWinnerId = null;
+
+const fmtNum = (n) => { n = Number(n) || 0; return n >= 10000 ? (n / 10000).toFixed(1).replace(/\.0$/, '') + '万' : String(n); };
+const ANON_ID = '111111';   // 抖音脱敏用户的统一占位 id，多个真人会撞成一个
+const isAnonId = (id) => !id || String(id) === ANON_ID;
+function normUser(u) {
+  u = u || {};
+  const nickname = u.nickname || '匿名观众';
+  return { id: String(u.id || u.shortId || nickname), nickname, avatar: u.avatar || '' };
+}
+function sizeOf(v) { return v >= 500 ? 'xl' : v >= 50 ? 'lg' : v >= 5 ? 'md' : 'sm'; }
+// 按「礼物价值」决定打印多大的奖牌，和原版一样拉开档次
+const SIZE_SCALE = { sm: 0.85, md: 1.0, lg: 1.12, xl: 1.45 };
+function tierOf(v) { return v >= 500 ? 3 : v >= 50 ? 2 : v >= 5 ? 1 : 0; }
+function priorityOf(j) { return j.priorityBase + Math.min((Date.now() - j.createdAt) / 1000, 120); }
+
+function touchUser(user, weight) {
+  if (!user) return;
+  const u = normUser(user);
+  const prev = recentUsers.get(u.id);
+  recentUsers.set(u.id, { user: u, ts: Date.now(), weight: Math.max(prev ? prev.weight : 0, weight) });
+  if (recentUsers.size > 60) {
+    [...recentUsers.entries()].sort((a, b) => a[1].ts - b[1].ts).slice(0, recentUsers.size - 60).forEach(([k]) => recentUsers.delete(k));
+  }
+}
+// 在线人数下降时，把最久没动静的观众踢出池子，避免抽到已经离开的人
+function trimByOnline(n) {
+  const keep = Number(n);
+  if (!Number.isFinite(keep) || keep < 0 || recentUsers.size <= keep) return;
+  [...recentUsers.entries()].sort((a, b) => a[1].ts - b[1].ts)
+    .slice(0, recentUsers.size - keep).forEach(([k]) => recentUsers.delete(k));
+}
+function pickRecent(excludeId) {
+  // 只看最近 presence 秒内有动静的人（进场/发言/点赞/送礼都算），长时间没动静的当已离开
+  const cut = Date.now() - CFG.presence * 1000;
+  const list = [...recentUsers.values()].filter((v) => v.ts >= cut && String(v.user.id) !== String(excludeId || ''));
+  if (!list.length) return null;
+  list.sort((a, b) => (b.weight * 1000 + b.ts / 1e6) - (a.weight * 1000 + a.ts / 1e6));
+  return list.slice(0, Math.min(8, list.length))[(Math.random() * Math.min(8, list.length)) | 0].user;
+}
+
+function makeGiftJob(ev) {
+  const g = ev.gift || {};
+  const diamond = Number(g.diamond) || 0;
+  const count = Math.max(1, Number(ev.count) || 1);
+  const total = diamond * count;
+  return {
+    id: 'job_' + (++seq), msgId: ev.msgId || '', source: 'gift', label: '礼物',
+    user: normUser(ev.user), gift: { name: g.name || '礼物', icon: g.icon || '' },
+    count, totalValue: total, tier: tierOf(total), size: sizeOf(total),
+    giftText: count > 1 ? `${g.name || '礼物'} ×${count}` : (g.name || '礼物'),
+    reasonText: count > 1 ? `${g.name || '礼物'} ×${count}` : (g.name || '礼物'),
+    priorityBase: 1000 + Math.min(total, 999) * 10, createdAt: Date.now(),
+  };
+}
+function makeInteractionJob(user, source, label, opts = {}) {
+  return {
+    id: 'job_' + (++seq), msgId: opts.msgId || '', source, label, user: normUser(user),
+    gift: null, count: opts.count || 1, totalValue: 0, tier: opts.tier || 0, size: opts.size || 'sm',
+    giftText: opts.giftText || label,
+    reasonText: opts.reasonText || label,
+    priorityBase: opts.priority || 200, createdAt: Date.now(),
+  };
+}
+
+/* 这个函数每帧都会调：文本只在变化时写 DOM，进度条按 1% 取整。
+   原来每帧重设 4 个 textContent，白白触发重排/重绘，也占帧时间。 */
+const capCache = { who: '', meta: '', icon: '', bar: -1, hidden: null };
+function capSet(id, key, val) {
+  if (capCache[key] === val) return;
+  capCache[key] = val;
+  $(id).textContent = val;
+}
+function updateCaption() {
+  if (!CFG.hud) return;
+  const cap = $('caption');
+  if (currentJob) {
+    if (capCache.hidden !== false) { cap.hidden = false; capCache.hidden = false; }
+    capSet('capWho', 'who', currentJob.job.name);
+    capSet('capMeta', 'meta', currentJob.job.source === 'gift'
+      ? `${currentJob.job.gift.name} ×${currentJob.job.count} · 打印中`
+      : `${currentJob.job.label} · 打印中`);
+    capSet('capIcon', 'icon', currentJob.job.source === 'gift' ? '礼' : currentJob.job.source === 'comment' ? '6' : '❤');
+    const pct = Math.round(Math.min(currentJob.t / currentJob.duration, 1) * 100);
+    if (pct !== capCache.bar) { capCache.bar = pct; $('capBar').style.width = pct + '%'; }
+  } else if (queue.length) {
+    if (capCache.hidden !== false) { cap.hidden = false; capCache.hidden = false; }
+    capSet('capWho', 'who', queue.length + ' 件排队中');
+    capSet('capMeta', 'meta', '下一位：' + queue.slice().sort((a, b) => priorityOf(b) - priorityOf(a))[0].user.nickname);
+    capSet('capIcon', 'icon', '≡');
+    if (capCache.bar !== 0) { capCache.bar = 0; $('capBar').style.width = '0%'; }
+  } else if (capCache.hidden !== true) {
+    cap.hidden = true; capCache.hidden = true;
+  }
+}
+
+/* ---- 打印流程：打印 → 揭幕 → 滑上传送带 ---- */
+async function startNext() {
+  if (printing || !queue.length) return;
+  printing = true;
+  // 高优先级先打
+  let bi = 0, bp = -Infinity;
+  queue.forEach((j, i) => { const p = priorityOf(j); if (p > bp) { bp = p; bi = i; } });
+  const job = queue.splice(bi, 1)[0];
+  const duration = (CFG.printSec / CFG.speed) * (job.size === 'xl' ? 1.25 : job.size === 'lg' ? 1.1 : job.size === 'md' ? 1 : 0.85);
+  job.name = job.user.nickname;
+  const avatar = await avatarTex(job.user.avatar, job.user.nickname);
+  const prod = makeProduct(job, avatar);
+  prod.group.position.set(PX, BED_Y, 0.1);
+  prod.group.rotation.y = -0.18;
+  scene.add(prod.group);
+  prod.plane.constant = BED_Y + 0.01;
+
+  currentJob = { job, prod, duration, t: 0 };
+  phase = 'print';
+  startPrintSound();
+
+  updateCaption();
+
+}
+
+function finishPrint() {
+  if (!currentJob) return;
+  stopPrintSound();
+  phase = 'reveal';
+  currentJob.prod.plane.constant = 1000;          // 全部露出来
+  currentJob.t = 0;
+  currentJob.revealT = 0;
+  counters.printed++;
+  if (currentJob.prod.glint) currentJob.prod.glint.visible = true;
+}
+
+function updateReveal(dt) {
+  const c = currentJob;
+  if (!c) return;
+  c.revealT = (c.revealT || 0) + dt;
+  const f = Math.min(c.revealT / 0.7, 1);
+  /* 关注奖牌揭幕时弹一下放大：1 → 1.3 → 1，配合同步推出的特写镜头 */
+  if (c.job.source === 'follow') {
+    c.prod.group.scale.setScalar((c.prod.scale || 1) * (1 + 0.3 * Math.sin(f * Math.PI)));
+  }
+  c.prod.glintMat.opacity = Math.sin(f * Math.PI) * 0.9;
+  c.prod.glint.position.x = -0.95 + f * 1.9;
+  c.prod.coverMat.opacity = 0.16 + Math.sin(f * Math.PI) * 0.24;
+  if (f >= 1) {
+    c.prod.glint.visible = false;
+    phase = 'transfer';
+    c.transferT = 0;
+  }
+}
+
+function updateTransfer(dt) {
+  const c = currentJob;
+  if (!c) return;
+  c.transferT += dt;
+  const t = c.transferT;
+  /* 夹爪锚点到作品原点的距离：抓住奖牌顶部往下带 */
+  const off = Math.min((c.prod.printH || 2) + 0.25, 2.9);
+  if (!c.armPts) {
+    c.armPts = {
+      from: armTarget.clone(),
+      grab: new THREE.Vector3(PX, BED_Y + off, 0.1),
+      grabUp: new THREE.Vector3(PX, BED_Y + off + 0.45, 0.1),
+      place: new THREE.Vector3(BELT_PLACE_X, BELT.y + off, BELT.z),
+      placeUp: new THREE.Vector3(BELT_PLACE_X, BELT.y + off + 0.45, BELT.z),
+    };
+  }
+  const p = c.armPts;
+  /* 机械臂动作：移到床头 → 下探抓住 → 抬起 → 横移到传送带上方 → 放下 */
+  if (t < 0.55) armTarget.lerpVectors(p.from, p.grabUp, easeIO(t / 0.55));
+  else if (t < 0.8) armTarget.lerpVectors(p.grabUp, p.grab, easeIO((t - 0.55) / 0.25));
+  else if (t < 1.0) armTarget.lerpVectors(p.grab, p.grabUp, easeIO((t - 0.8) / 0.2));
+  else if (t < 1.9) {
+    const f = easeIO((t - 1.0) / 0.9);
+    armTarget.lerpVectors(p.grabUp, p.placeUp, f);
+    armTarget.y += Math.sin(f * Math.PI) * 0.25;   // 搬运走个弧线
+  } else if (t < 2.1) armTarget.lerpVectors(p.placeUp, p.place, easeIO((t - 1.9) / 0.2));
+  // 抓住的奖牌跟着夹爪走
+  if (t >= 0.8 && t < 2.1) {
+    c.prod.group.position.set(armTarget.x, armTarget.y - off, armTarget.z);
+    // 搬运途中把偏转收回来，落到传送带上和传送带平行
+    c.prod.group.rotation.y = -0.18 * Math.max(0, 1 - (t - 0.8) / 0.5);
+  }
+  // 放到传送带上，交回传送带逻辑
+  if (t >= 2.1) {
+    c.prod.group.position.copy(p.place).setY(BELT.y + 0.02);
+    c.prod.group.rotation.y = 0;
+    placeOnBelt(c.prod);
+    // 礼物和关注：放上传送带之后才推近特写，拍的是刚放好的那个成品奖杯
+    if (c.job.source === 'gift' || c.job.source === 'follow') beltFocus(c.prod);
+    currentJob = null;
+    printing = false;
+    phase = 'idle';
+    updateCaption();
+    startNext();
+  }
+}
+
+/* 礼物/关注放上传送带后推近特写：沿着全景视角原方向推进去，不换角度，拍刚放好的成品 */
+function aimBeltCam(x, h) {
+  const base = BASE_CAM[orient()];
+  const target = new THREE.Vector3(x, BELT.y + h * 0.5, BELT.z);
+  const camPos = new THREE.Vector3(...base.pos);
+  const dir = target.clone().sub(camPos).normalize();   // 全景机位 -> 奖杯 的方向
+  const fov = base.fov || 34;
+  // 按奖杯高度算一个能完整入镜的距离，只沿原方向推进，视角不变
+  const dist = Math.max(4.5, (h * 1.9) / (2 * Math.tan((fov * Math.PI / 180) / 2)));
+  const pos = target.clone().addScaledVector(dir, -dist);
+  beltCloseCam = { pos: pos.toArray(), target: target.toArray(), fov };
+}
+function beltFocus(prod) {
+  const tok = ++beltFocusToken;
+  beltFocusProd = prod;
+  camHoldUntil = Date.now() + 4500;
+  // 等机械臂退回一点再推近；这期间奖杯可能被往右推了一格，按实际位置取景
+  setTimeout(() => {
+    if (tok !== beltFocusToken) return;
+    aimBeltCam(prod.group.position.x, prod.printH || 2);
+    setView('close');
+  }, 800);
+  // 到点自动回全景，哪怕后面还在排队打印
+  setTimeout(() => { if (tok === beltFocusToken && camView.mode === 'close') setView('overview'); }, 4500);
+}
+
+/* 上台：新作品落在传送带最左边，之后跟着传送带一起往右滚 */
+function placeOnBelt(prod) {
+  beltItems.push({ group: prod.group, prod });
+}
+
+/* ================= 每帧 ================= */
+let fpsFrames = 0, fpsStart = performance.now(), lowStreak = 0, frameCount = 0, lastQualityChange = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+
+
+  if (document.hidden) { lastFrame = now; return; }
+  const dt = Math.min((now - lastFrame) / 1000, 0.06);
+  lastFrame = now;
+
+  if (currentJob) {
+    const c = currentJob;
+    if (phase === 'print') {
+      c.t += dt;
+      const f = Math.min(c.t / c.duration, 1);
+      // 材料一层层长上去
+      const sc = c.prod.scale;
+      c.prod.plane.constant = BED_Y + f * c.prod.printH;
+      // 喷头走位：矩形一圈圈向内收。宽度随进度平滑收窄（原来在 10% / 32% 处硬切 band，
+      // 两次切换会让喷头瞬移 ~0.2 个单位，看着就是"卡一下"）。
+      const sm = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+      const s1 = sm(0.08, 0.2, f), s2 = sm(0.3, 0.42, f);
+      const hw = 0.95 - 0.2 * s1 - 0.09 * s2, hd = 0.47 - 0.07 * s1 - 0.1 * s2;
+      const per = 4 * (hw + hd);
+      // 用 dt 累积推进（不再吃 wall clock），掉一帧也不会让喷头窜出去；单位是商品空间/秒
+      c.pathT = (c.pathT || 0) + dt * 3.2;
+      let d = c.pathT % per, px, pz;
+      if (d < 2 * hw) { px = -hw + d; pz = -hd; }
+      else if ((d -= 2 * hw) < 2 * hd) { px = hw; pz = -hd + d; }
+      else if ((d -= 2 * hd) < 2 * hw) { px = hw - d; pz = hd; }
+      else { d -= 2 * hw; px = -hw; pz = hd - d; }
+      // 龙门架在后面，喷头向前探到打印床上方，喷嘴正好贴着当前打印高度
+      gantry.position.y = Math.min(BED_Y + f * c.prod.printH + 0.62, 4.32);
+      // 用指数平滑追目标（和帧率无关）：拐角自然减速，从待机位滑进打印路径也不再"啪"地跳
+      const ease = 1 - Math.exp(-dt * 24);
+      head.position.x += (px * sc - head.position.x) * ease;
+      head.position.z += (0.92 + pz * sc - head.position.z) * ease;
+      fanSpin.rotation.z += dt * 16;
+      // 火花
+      nozzleTip.getWorldPosition(nozzleWorld);
+      if (Math.random() < 0.8) emitSpark();
+      if (f >= 1) finishPrint();
+    } else if (phase === 'reveal') {
+      updateReveal(dt);
+      // 打完就把喷头挪到左边，奖牌和两块铭牌完整露给镜头
+      head.position.x += (-1.6 - head.position.x) * Math.min(1, dt * 3);
+      head.position.z += (0.55 - head.position.z) * Math.min(1, dt * 3);
+      gantry.position.y += (4.0 - gantry.position.y) * Math.min(1, dt * 2.4);
+    } else if (phase === 'transfer') {
+      updateTransfer(dt);
+      head.position.x += (-1.6 - head.position.x) * Math.min(1, dt * 3);
+      head.position.z += (0.55 - head.position.z) * Math.min(1, dt * 3);
+      gantry.position.y += (4.0 - gantry.position.y) * Math.min(1, dt * 2.4);
+    }
+    updateCaption();
+  } else {
+    // 待机：龙门架缓缓归位，喷头回原点
+    gantry.position.y += (4.05 - gantry.position.y) * Math.min(1, dt * 2);
+    head.position.x += (-1.55 - head.position.x) * Math.min(1, dt * 2);
+    head.position.z += (0.5 - head.position.z) * Math.min(1, dt * 2);
+  }
+
+  // 机械臂：不在搬运时缓缓回待机位，每帧解一次 IK
+  if (!currentJob || phase !== 'transfer') armTarget.lerp(ARM.home, Math.min(1, dt * 2));
+  solveArm(armTarget);
+
+  // 传送带一直滚，上面的奖杯跟着一起往右走，走到头滑出画面
+  beltTex.offset.x -= dt * 0.26;
+  for (const r of rollers) r.rotation.y += dt * 2.4;
+  for (let i = beltItems.length - 1; i >= 0; i--) {
+    const it = beltItems[i];
+    it.group.position.x += dt * BELT_SPEED;
+    if (it.group.position.x > BELT.x1 + 1.2) {
+      /* 木纹是全局共享纹理（地板、工作台、M.wood 都在用），这里绝对不能 dispose——
+         原来每件奖杯滚下传送带都把 1024 木纹贴图销毁一次，下一帧再重新上传，
+         表现就是"有时候突然卡一下 / 画面闪一下"。 */
+      it.group.traverse((o) => {
+        if (!o.isMesh) return;
+        o.geometry.dispose();
+        if (o.material.map && o.material.map !== wood) o.material.map.dispose();
+        o.material.dispose();
+      });
+      scene.remove(it.group);
+      beltItems.splice(i, 1);
+    }
+  }
+  // 特写正在拍传送带上的成品时，镜头跟着它一起往右走
+  if (beltFocusProd && camView.mode === 'close') {
+    aimBeltCam(beltFocusProd.group.position.x, beltFocusProd.printH || 2);
+    applyCam();
+  }
+
+  // 线盘：打印时慢慢转，像在出料
+  for (const sp of spools) sp.rotation.z += dt * (currentJob ? 0.9 : 0.12);
+  updateSparks(dt);
+  hotLight.intensity = currentJob && phase === 'print' ? 2.0 + Math.sin(now / 120) * 0.7 : 0.6;
+  ledStrip.material.color.setHex(currentJob ? 0x35b0c8 : 0x2a6a7a);
+
+  // 特写保持到本件打完+几秒；没东西在打就回全景
+  if (camView.mode === 'close' && !currentJob && Date.now() > camHoldUntil) setView('overview');
+  stepCam(dt);
+  updateHoses();
+  /* 阴影只在"画面在动"时才重算：喷头在动 / 有奖杯在传送带上 / 相机在过渡。
+     老集显上重绘一次阴影贴图就是 200-300ms 的卡顿，这正是一直觉得"在刷新"的原因。 */
+  /* 阴影只在"画面在动"时才重算：喷头在动 / 有奖杯在传送带上 / 相机在过渡。
+     打印中喷头一直在走，隔 4 帧才更新一次的话特写里影子明显一顿一顿，改成隔 2 帧。 */
+  const sceneMoving = !!currentJob || beltItems.length > 0 || camView.moving;
+  if (sceneMoving && !(frameCount % (phase === 'print' ? 2 : 4))) renderer.shadowMap.needsUpdate = true;
+  frameCount++;
+  if (controls) controls.update();
+  renderer.render(scene, camera);
+
+  /* 自适应画质：只降不升。
+     像素比来回加，画布缓冲区就会反复重建，OBS 里看到的就是"突然闪一下 / 像刷新"；
+     所以连续掉帧才降一档，降到 1 为止，有余量也不再加回去。 */
+  fpsFrames++;
+  if (now - fpsStart > 2500) {
+    const fps = (fpsFrames * 1000) / (now - fpsStart);
+    fpsFrames = 0; fpsStart = now;
+    const settled = now - lastQualityChange > 8000;
+    if (fps < 45 && renderer.getPixelRatio() > 1) {
+      if (++lowStreak >= 2 && settled) {
+        /* setPixelRatio 内部按当前尺寸重设缓冲，别再去 relayout() 改一次 DOM 样式 */
+        renderer.setPixelRatio(Math.max(1, renderer.getPixelRatio() - 0.25));
+        lowStreak = 0; lastQualityChange = now;
+      }
+    } else {
+      lowStreak = 0;
+    }
+  }
+  publishTick();
+}
+requestAnimationFrame(tick);
+
+/* 首次加载预热：在加载遮罩后面先把所有材质（尤其奖牌那套清漆/金属/裁剪材质）渲染一两帧，
+   着色器编译的卡顿就发生在这块遮罩后面，正式投产时不再卡。 */
+const bootEl = $('boot');
+const bootStep = $('bootStep');
+const nextFrames = (n) => new Promise((res) => {
+  let k = 0;
+  const step = () => (++k >= n ? res() : requestAnimationFrame(step));
+  requestAnimationFrame(step);
+});
+async function warmUp() {
+  const samples = [];
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 8;
+    /* 四个档位的材质变体都编一遍：tier 0 的瓷面带木纹贴图，着色器是另一套，
+       第一次出现时才现场编译，在集显上就是一次 0.5~1 秒的"卡死"。
+       样例放在床后面很远处：在相机视锥内、会被渲染流程遍历到，但擦着深度被挡住。 */
+    for (const tier of [0, 1, 2, 3]) {
+      if (bootStep) bootStep.textContent = `预先编译材质 ${tier + 1}/4`;
+      const sample = makeProduct(
+        { name: '准备中', giftText: '准备中', reasonText: '准备中', tier, size: 'md', source: 'gift', user: { nickname: '准备中' } },
+        new THREE.CanvasTexture(c),
+      );
+      sample.group.position.set(PX, BED_Y, -60);
+      if (sample.glint) sample.glint.visible = true;      // 完稿扫光的材质也提前编
+      scene.add(sample.group);
+      samples.push(sample);
+      await nextFrames(2);
+    }
+    /* 火花是 Points：平时粒子全在视锥外被剔除，第一颗火花就会现场编译 */
+    sparkPos[0] = 0; sparkPos[1] = BED_Y + 1; sparkPos[2] = 0.1;
+    sparkMat.opacity = 1;
+    sparkGeo.attributes.position.needsUpdate = true;
+    sparks.frustumCulled = false;
+    await nextFrames(1);
+    sparkPos[1] = -999;
+    sparkGeo.attributes.position.needsUpdate = true;
+  } catch (e) {
+    console.warn('[studio] warmup', e);
+  }
+  for (const sample of samples) {
+    scene.remove(sample.group);
+    sample.group.traverse((o) => {
+      if (!o.isMesh) return;
+      o.geometry.dispose();
+      if (o.material.map && o.material.map !== wood) o.material.map.dispose();   // 木纹是共享的，别 dispose
+      o.material.dispose();
+    });
+  }
+  if (bootStep) bootStep.textContent = '就绪';
+  lastQualityChange = performance.now();   // 预热期间的掉帧不算数，别一上来就把像素比降了
+  await nextFrames(2);
+  if (bootEl) { bootEl.classList.add('hide'); setTimeout(() => bootEl.remove(), 600); }
+}
+let warmedUp = false;
+setTimeout(() => { if (!warmedUp) { warmedUp = true; warmUp(); } }, 50);
+
+/* ================= 快照给 /stats 信息页 ================= */
+function snapshot() {
+  const label = (j) => (j.source === 'gift' && j.gift ? `${j.gift.name} ×${j.count}` : j.label);
+  return {
+    ts: Date.now(), online, coin: counters.coin, printed: counters.printed, gifts: counters.gifts,
+    state: phase === 'transfer' ? 'shelf' : phase,
+    now: currentJob ? { name: currentJob.job.name, label: label(currentJob.job), tier: currentJob.job.tier } : null,
+    lotteryNext, likeStep: CFG.likeStep, lotteryMin: CFG.lotteryMin, queued: queue.length,
+    giftSizes: giftSizeRows(),
+    queue: queue.slice().sort((a, b) => priorityOf(b) - priorityOf(a)).map((j) => ({
+      name: j.user.nickname, avatar: j.user.avatar || '', tier: Math.max(0, j.tier), label: j.source === 'gift' ? '礼物' : j.label,
+      gift: j.source === 'gift' && j.gift ? j.gift.name : '', count: j.count, value: j.totalValue, size: j.size,
+      label: j.source === 'gift' ? '礼物' : (j.reasonText || j.label),
+    })),
+  };
+}
+let wsConn = null;
+let lastPublish = 0;
+function publishTick() {
+  const now = performance.now();
+  if (now - lastPublish < 700) return;
+  lastPublish = now;
+  if (!wsConn || wsConn.readyState !== 1) return;
+  try { wsConn.send(JSON.stringify({ type: 'stats-snapshot', snapshot: snapshot() })); } catch (e) {}
+}
+
+/* ================= 事件 ================= */
+function onGift(ev) {
+  touchUser(ev.user, 3);
+  noteGift(ev);
+  const g = ev.gift || {};
+  const count = Math.max(1, Number(ev.count) || 1);
+  counters.gifts++;
+  counters.coin += (Number(g.diamond) || 0) * count;
+
+  const key = `${(ev.user && (ev.user.id || ev.user.nickname)) || ''}|${g.id || g.name || ''}`;
+  const now = Date.now();
+  const hit = comboIndex.get(key);
+  if (hit && now - hit.ts < 6000) {
+    const job = hit.job;
+    if (queue.includes(job)) {
+      hit.ts = now;
+      job.count += count;
+      job.totalValue = (Number(g.diamond) || 0) * job.count;
+      job.tier = tierOf(job.totalValue);
+      job.size = sizeOf(job.totalValue);
+      if (job.gift) {
+        job.giftText = job.count > 1 ? `${job.gift.name} ×${job.count}` : job.gift.name;
+        job.reasonText = job.giftText;
+      }
+      job.priorityBase = 1000 + Math.min(job.totalValue, 999) * 10;
+      updateCaption();
+      return;
+    }
+  }
+  const job = makeGiftJob(ev);
+  comboIndex.set(key, { job, ts: now });
+  if (queue.length >= CFG.maxq) queue.sort((a, b) => priorityOf(a) - priorityOf(b)).shift();
+  queue.push(job);
+  if (window.Voice) Voice.gift(ev);
+  updateCaption();
+  startNext();
+}
+
+function onSocial(ev) {
+  const type = ev.type === 'share' ? 'share' : 'follow';
+  touchUser(ev.user, 2);
+  const u = normUser(ev.user);
+  const key = type + ':' + u.id;
+  const now = Date.now();
+  if ((socialGuard.get(key) || 0) > now - 30000) return;
+  socialGuard.set(key, now);
+  queue.push(makeInteractionJob(ev.user, type, type === 'follow' ? '关注' : '分享', {
+    priority: 240, tier: 1, size: 'sm',
+    reasonText: type === 'follow' ? '关注了主播' : '分享了直播间',
+  }));
+  // 关注 / 分享也来一句感谢
+  if (window.Voice) Voice.say(Voice.compose(type, u.nickname), type);
+  updateCaption();
+  startNext();
+}
+function onChat(ev) {
+  touchUser(ev.user, 1);
+  const text = String((ev && ev.text) || '');
+  // 主播调试口令：评论「测试大号」直接打印一个大号奖牌，并自动推近特写
+  if (text.includes('测试大号')) {
+    queue.push(makeGiftJob({ user: ev.user, msgId: ev.msgId, count: 1, gift: { name: '测试大号', diamond: 120 } }));
+    updateCaption();
+    startNext();
+    return;
+  }
+  // 隐藏彩蛋：评论区扣 666（3 个及以上 6）就打印一张小奖牌
+  if (!/6{3,}/.test(text)) return;
+  const now = Date.now();
+  if (now - last666At < 5000) return;
+  last666At = now;
+  queue.push(makeInteractionJob(ev.user, 'comment', '666', {
+    priority: 150, tier: 0, size: 'sm', reasonText: '评论 666',
+  }));
+  // 666 也来一句答谢 + 吉利话
+  if (window.Voice) Voice.say(Voice.compose('comment', ev.user && ev.user.nickname), 'comment');
+  updateCaption();
+  startNext();
+}
+function onLike(ev, count) {
+  if (ev && ev.user) touchUser(ev.user, 1);
+  const n = Math.max(1, Number((ev && ev.count) || count) || 1);
+  likeCarry = Math.min(500, likeCarry + n);
+  const user = ev && ev.user ? normUser(ev.user) : null;
+  if (user) {
+    // 脱敏用户 uid 全是 111111 分不出人，只能退而用昵称当键
+    const key = isAnonId(user.id) ? 'n:' + user.nickname : 'id:' + user.id;
+    const rec = likeCounts.get(key) || { user, n: 0, ts: 0 };
+    rec.user = user;
+    rec.n += n;
+    rec.ts = Date.now();
+    likeCounts.set(key, rec);
+    if (likeCounts.size > 200) {
+      [...likeCounts.entries()].sort((a, b) => a[1].ts - b[1].ts).slice(0, likeCounts.size - 200).forEach(([k]) => likeCounts.delete(k));
+    }
+  }
+  if (likeCarry >= CFG.likeStep && !likeTimer) likeTimer = setTimeout(flushLikes, 600);
+}
+function flushLikes() {
+  likeTimer = null;
+  if (likeCarry < CFG.likeStep) return;
+  if (Date.now() - lastLikeJobAt < 3000) { likeTimer = setTimeout(flushLikes, 1200); return; }
+  // 找出真正累计到一档的人，打他自己的奖牌（之前是随机挑最近观众，名字容易串到别人）
+  let hitKey = null, hit = null;
+  for (const [k, r] of likeCounts) {
+    if (r.n < CFG.likeStep) continue;
+    if (!hit || r.n > hit.n || (r.n === hit.n && r.ts > hit.ts)) { hit = r; hitKey = k; }
+  }
+  if (!hit) { likeCarry = 0; return; }   // 没记录到人（旧数据），清空避免卡死
+  hit.n -= CFG.likeStep;
+  likeCarry = Math.max(0, likeCarry - CFG.likeStep);
+  if (hit.n <= 0) likeCounts.delete(hitKey);
+  lastLikeJobAt = Date.now();
+  likeThanks++;
+  queue.push(makeInteractionJob(hit.user, 'like', '点赞连击', {
+    priority: 120, tier: 0, size: 'sm', reasonText: '点赞连击',
+  }));
+  if (window.Voice) Voice.say(Voice.compose('like', hit.user.nickname), 'like');
+  updateCaption();
+  startNext();
+  if (likeCarry >= CFG.likeStep || [...likeCounts.values()].some((r) => r.n >= CFG.likeStep)) {
+    likeTimer = setTimeout(flushLikes, 900);
+  }
+}
+const enterGuard = new Map();   // 进场打印的冷却（同一人 60 秒内只打一次）
+const ENTER_PRINT_MAX_ONLINE = 50;   // 在线人数超过这个值就不再给进场的人打印，让位给礼物
+function onEnter(ev) {
+  // 进场的观众也要进"最近观众"池，不然抽奖永远抽不到只进场不发言的人
+  if (ev && ev.user) touchUser(ev.user, 1);
+  if (window.Voice) Voice.enter(ev);
+  // 人少的时候，进场也打印一枚小奖牌；人数多或未知就不打（礼物优先）
+  if (!ev || !ev.user) return;
+  if (online == null || online > ENTER_PRINT_MAX_ONLINE) return;
+  const u = normUser(ev.user);
+  const key = isAnonId(u.id) ? 'n:' + u.nickname : 'id:' + u.id;
+  const now = Date.now();
+  if (now - (enterGuard.get(key) || 0) < 60000) return;
+  if (enterGuard.size > 300) enterGuard.clear();
+  enterGuard.set(key, now);
+  queue.push(makeInteractionJob(ev.user, 'enter', '进入', {
+    priority: 60, tier: 0, size: 'sm', reasonText: '进直播间',
+  }));
+  updateCaption();
+  startNext();
+}
+
+/* 抽奖 */
+if (CFG.lottery) {
+  const ms = CFG.lotteryMin * 60 * 1000;
+  lotteryNext = Date.now() + ms;
+  setInterval(() => {
+    lotteryNext = Date.now() + ms;
+    // 脱敏用户 id 恒为 111111，排除上期中奖者会把整个池子排掉，就不排除了
+    const user = pickRecent(isAnonId(lastWinnerId) ? null : lastWinnerId);
+    if (!user) return;   // 没有观众就跳过这一轮，不硬抽
+    lastWinnerId = user.id;
+    queue.push(makeInteractionJob(user, 'lottery', '幸运观众', { priority: 320, tier: 1, size: 'md', reasonText: '幸运观众' }));
+    if (window.Voice) Voice.say(Voice.compose('lottery', user.nickname), 'lottery');
+    updateCaption();
+    startNext();
+  }, ms);
+}
+
+/* ================= 语音解锁提示 ================= */
+const tapPill = $('tapPill');
+function refreshTapPill() {
+  if (!tapPill || !window.Voice) return;
+  if (CFG.demo) {
+    // 演示模式没服务端配置，按“开着”处理
+    Voice.demo(true);
+  }
+  const st = Voice.state();
+  tapPill.hidden = !(st.enabled && st.engine !== 'server' && !st.unlocked);
+}
+if (tapPill) {
+  tapPill.addEventListener('pointerdown', () => window.Voice && Voice.unlock(), { passive: true });
+  setTimeout(refreshTapPill, 500);
+  setInterval(refreshTapPill, 1500);
+}
+
+/* ================= WebSocket ================= */
+function setConn(text, ok) {
+  $('connText').textContent = text;
+  $('connDot').classList.toggle('on', !!ok);
+}
+function dedupe(m) {
+  if (!m.msgId) return true;
+  if (seen.has(m.msgId)) return false;
+  seen.add(m.msgId);
+  if (seen.size > 1200) { let n = 0; for (const id of seen) { seen.delete(id); if (++n > 400) break; } }
+  return true;
+}
+function dispatch(m) {
+  switch (m.type) {
+    case 'hello':
+      if (m.online != null) { online = m.online; trimByOnline(m.online); }
+      if (window.Voice) Voice.apply(m.voice);
+      setConn('已连接', true);
+      break;
+    case 'voice-config':
+      if (window.Voice) Voice.apply(m.voice);
+      break;
+    case 'stats':
+      if (m.online != null) { online = m.online; trimByOnline(m.online); }
+      break;
+    case 'room':
+    case 'room-changed':
+      queue.length = 0;
+      recentUsers.clear();
+      updateCaption();
+      break;
+    case 'gift':
+      if (dedupe(m)) onGift(m);
+      break;
+    case 'follow':
+    case 'share':
+      if (dedupe(m)) onSocial(m);
+      break;
+    case 'chat':
+      if (dedupe(m)) onChat(m);
+      break;
+    case 'like':
+      if (dedupe(m)) onLike(m);
+      break;
+    case 'enter':
+      if (dedupe(m)) onEnter(m);
+      break;
+    case 'stopped':
+      queue.length = 0;
+      setConn('监控已停止', false);
+      updateCaption();
+      break;
+    case 'error':
+      setConn('错误：' + (m.message || '未知'), false);
+      break;
+    default: break;
+  }
+}
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  let ws;
+  try { ws = new WebSocket(`${proto}://${location.host}/events`); } catch (e) { setTimeout(connect, 2000); return; }
+  wsConn = ws;
+  ws.onopen = () => { setConn('已连接', true); publishTick(); };
+  ws.onclose = () => { setConn('断开，重连中…', false); setTimeout(connect, 2000); };
+  ws.onerror = () => {};
+  ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } dispatch(m); };
+}
+
+/* ================= 演示模式 ================= */
+function startDemo() {
+  setConn('演示模式', true);
+  online = 12000 + ((Math.random() * 8000) | 0);
+  const names = ['小鹿乱撞', '一只咸鱼', '夜航船', '阿May', '甜筒不加冰', '橘子汽水', '风你吹过', '咕噜咕噜', '不爱吃香菜', '南巷旧人'];
+  const gifts = [
+    { id: '1', name: '小心心', diamond: 1 }, { id: '2', name: '大啤酒', diamond: 2 }, { id: '3', name: '鲜花', diamond: 5 },
+    { id: '4', name: '棒棒糖', diamond: 9 }, { id: '5', name: '小海豚', diamond: 10 }, { id: '6', name: '嘉年华', diamond: 3000 },
+  ];
+  const pick = (a) => a[(Math.random() * a.length) | 0];
+  let n = 0;
+  const loop = () => {
+    if (document.hidden) { setTimeout(loop, 2000); return; }
+    n++;
+    const user = { id: 'demo_' + ((Math.random() * 16) | 0), nickname: pick(names) + ((Math.random() * 90) | 0), shortId: String(100000000 + ((Math.random() * 899999999) | 0)), avatar: '' };
+    const r = Math.random();
+    if (r < 0.5) onGift({ type: 'gift', msgId: 'demo_' + n + '_' + Date.now(), user, gift: pick(gifts), count: 1 + ((Math.random() * 3) | 0) });
+    else if (r < 0.58) onEnter({ type: 'enter', user });
+    else if (r < 0.72) onChat({ type: 'chat', msgId: 'demo_' + n, user });
+    else if (r < 0.82) onSocial({ type: 'follow', msgId: 'demo_' + n, user });
+    else if (r < 0.9) onSocial({ type: 'share', msgId: 'demo_' + n, user });
+    else onLike({ type: 'like', msgId: 'demo_' + n, user, count: 1 + ((Math.random() * 8) | 0) });
+    setTimeout(loop, 1600 + Math.random() * 1600);
+  };
+  loop();
+}
+
+if (CFG.demo) startDemo();
+else connect();
+
+/* ================= 相机 / 横竖屏控制条 ================= */
+(function setupCamBar() {
+  if (params.get('ui') === '0') return;
+  const bar = $('camBar');
+  if (!bar) return;
+  const btns = [...bar.querySelectorAll('button')];
+  let hideTimer = 0;
+  function show() {
+    bar.classList.add('show');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => bar.classList.remove('show'), 3000);
+  }
+  function fire(el) {
+    const view = el.dataset.view, o = el.dataset.orient;
+    if (view) { camManualUntil = Date.now() + 4000; beltFocusToken++; setView(view); }
+    if (o) { forcedOrient = o === 'auto' ? '' : o; try { localStorage.setItem('studio-orient', forcedOrient); } catch (e) {} applyAspect(); }
+  }
+  for (const b of btns) b.addEventListener('click', (e) => { e.stopPropagation(); fire(b); show(); });
+  addEventListener('pointermove', show);
+  addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'h') return show();
+    if (k === '1') return fire({ dataset: { view: 'overview' } }), show();
+    if (k === '2') return fire({ dataset: { view: 'close' } }), show();
+    if (k === 'a') return fire({ dataset: { orient: 'auto' } }), show();
+    if (k === 'l') return fire({ dataset: { orient: 'landscape' } }), show();
+    if (k === 'p') return fire({ dataset: { orient: 'portrait' } }), show();
+  });
+  // 状态高亮：当前视角/方向
+  setInterval(() => {
+    const o = forcedOrient || 'auto';
+    for (const b of btns) {
+      if (b.dataset.view) b.classList.toggle('on', b.dataset.view === camView.mode);
+      if (b.dataset.orient) b.classList.toggle('on', b.dataset.orient === o);
+    }
+  }, 400);
+})();
+
+/* 调试入口：控制台里注入事件、看状态 */
+window.__studio = {
+  event: dispatch,
+  gift: onGift,
+  social: onSocial,
+  like: onLike,
+  enter: onEnter,
+  tick: () => flushLikes(),
+  likes: () => ({ carry: likeCarry, thanks: likeThanks }),
+  queue: () => queue.map((j) => ({ name: j.user.nickname, label: j.label, value: j.totalValue, priority: Math.round(priorityOf(j)) })),
+  state: () => ({ phase, printing, current: currentJob ? currentJob.job.name : null, belt: beltItems.length, counters: { ...counters }, queue: queue.length }),
+  snapshot,
+  camera: () => ({ pos: camera.position.toArray(), view: camView.mode, t: camView.t, orient: orient() }),
+  view: (mode) => setView(mode),
+  orient: (o) => { forcedOrient = o === 'portrait' || o === 'landscape' ? o : ''; try { localStorage.setItem('studio-orient', forcedOrient); } catch (e) {} applyAspect(); if (!CFG.edit) applyCam(); },
+  setCam: (p, t, fov) => { camera.position.set(...p); camera.lookAt(...t); if (fov) { camera.fov = fov; camera.updateProjectionMatrix(); } },
+};
+</script>
+</body>
+</html>

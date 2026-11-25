@@ -1,0 +1,896 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#160f09" />
+<link rel="icon" href="data:," />
+<title>接单画纸 · 素描直播间</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#160f09;overscroll-behavior:none}
+#stage{position:absolute;left:0;top:0;width:1080px;height:1920px;transform-origin:0 0}
+#stage canvas{display:block;width:1080px;height:1920px}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv" width="1080" height="1920"></canvas></div>
+<script>
+/* 接单画纸：竖屏直播画面。木桌 + 手机接单面板 + 一叠画好的纸，
+   手拿铅笔把观众的真人头像画成素描。数据走 /events，和 3D 工作室同一套事件。 */
+(function () {
+  'use strict';
+  const DESIGN = { w: 1080, h: 1920 };
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const stage = document.getElementById('stage');
+  const params = new URLSearchParams(location.search);
+  const DEMO = params.has('demo');
+
+  function fit() {
+    const s = Math.min(innerWidth / DESIGN.w, innerHeight / DESIGN.h);
+    stage.style.transform = `translate(${(innerWidth - DESIGN.w * s) / 2}px,${(innerHeight - DESIGN.h * s) / 2}px) scale(${s})`;
+  }
+  addEventListener('resize', fit);
+  fit();
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const smoothstep = (a, b, v) => {
+    const t = clamp((v - a) / (b - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+
+  /* ================= 静态背景：木桌 + 文具 ================= */
+  const bg = document.createElement('canvas');
+  bg.width = DESIGN.w; bg.height = DESIGN.h;
+  (function paintDesk() {
+    const g = bg.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, DESIGN.h);
+    grad.addColorStop(0, '#6b4830');
+    grad.addColorStop(0.5, '#5a3a25');
+    grad.addColorStop(1, '#4a2f1e');
+    g.fillStyle = grad; g.fillRect(0, 0, DESIGN.w, DESIGN.h);
+
+    // 木纹：横向长条纹理 + 偶尔的深色木节
+    for (let i = 0; i < 220; i++) {
+      const y = Math.random() * DESIGN.h;
+      const w = rand(200, 900), x = rand(-100, DESIGN.w);
+      g.strokeStyle = `rgba(${30 + rand(0, 30)},${18 + rand(0, 18)},${8 + rand(0, 10)},${rand(0.04, 0.12)})`;
+      g.lineWidth = rand(1, 4);
+      g.beginPath();
+      g.moveTo(x, y);
+      g.bezierCurveTo(x + w * 0.3, y + rand(-6, 6), x + w * 0.7, y + rand(-6, 6), x + w, y + rand(-3, 3));
+      g.stroke();
+    }
+    for (let i = 0; i < 14; i++) {
+      const x = rand(0, DESIGN.w), y = rand(0, DESIGN.h);
+      g.fillStyle = 'rgba(40,24,12,.16)';
+      g.beginPath(); g.ellipse(x, y, rand(6, 18), rand(3, 7), rand(0, 3), 0, 7); g.fill();
+    }
+
+    // 右下角的彩色铅笔
+    const pencilCols = ['#c9503c', '#d99a3c', '#8fae4e', '#4f8fa8', '#7a5ca8', '#c26f8e', '#b8843e', '#5d8a6a'];
+    for (let i = 0; i < pencilCols.length; i++) {
+      const a = -0.42 + i * 0.075;
+      const x = 980 - i * 10, y = 1010 + i * 9;
+      g.save(); g.translate(x, y); g.rotate(a);
+      g.fillStyle = 'rgba(0,0,0,.22)';
+      g.fillRect(6, -4, 230, 14);
+      g.fillStyle = pencilCols[i];
+      g.fillRect(0, -8, 230, 16);
+      g.fillStyle = 'rgba(255,255,255,.16)';
+      g.fillRect(0, -8, 230, 4);
+      g.fillStyle = '#e9d5ae';
+      g.beginPath(); g.moveTo(-24, 0); g.lineTo(2, -8); g.lineTo(2, 8); g.closePath(); g.fill();
+      g.fillStyle = '#3b3b3b';
+      g.beginPath(); g.moveTo(-24, 0); g.lineTo(-14, -3); g.lineTo(-14, 3); g.closePath(); g.fill();
+      g.restore();
+    }
+
+    // 手机充电线：从手机底部绕到画面下边
+    g.strokeStyle = '#efe9dd'; g.lineWidth = 14; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(210, 1610);
+    g.bezierCurveTo(180, 1720, 300, 1810, 380, 1920);
+    g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 16;
+    g.beginPath();
+    g.moveTo(222, 1612);
+    g.bezierCurveTo(192, 1722, 312, 1812, 392, 1920);
+    g.stroke();
+
+    // 四周暗角
+    const vg = g.createRadialGradient(DESIGN.w / 2, DESIGN.h / 2, DESIGN.h * 0.28, DESIGN.w / 2, DESIGN.h / 2, DESIGN.h * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,.42)');
+    g.fillStyle = vg; g.fillRect(0, 0, DESIGN.w, DESIGN.h);
+  })();
+
+  /* ================= 头像 / 素描 ================= */
+  const PAPER = { w: 640, h: 760 };   // 单张画纸像素尺寸（离屏渲染）
+
+  function roundRect(g, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  }
+
+  function fallbackAvatar(name) {
+    const c = document.createElement('canvas'); c.width = c.height = 512;
+    const g = c.getContext('2d');
+    const pals = [['#ffb284', '#c96f4a'], ['#a9b8f4', '#5a6fd6'], ['#91cbb1', '#4d927b'], ['#efa8b9', '#d16a86'], ['#e6bc6a', '#bd8f3a'], ['#ba9ee0', '#7e5cc0']];
+    let hsh = 0; for (const ch of String(name || '?')) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+    const p = pals[hsh % pals.length];
+    const grd = g.createLinearGradient(0, 0, 512, 512);
+    grd.addColorStop(0, p[0]); grd.addColorStop(1, p[1]);
+    g.fillStyle = grd; g.fillRect(0, 0, 512, 512);
+    g.fillStyle = '#fff'; g.font = '800 230px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText([...(String(name || '?'))][0] || '?', 256, 276);
+    return c;
+  }
+
+  function coverCanvas(img) {
+    const c = document.createElement('canvas'); c.width = c.height = 512;
+    const g = c.getContext('2d');
+    const s = Math.min(img.width, img.height);
+    g.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 512, 512);
+    return c;
+  }
+
+  function loadAvatar(user) {
+    return new Promise((resolve) => {
+      const url = user && user.avatar ? '/img?u=' + encodeURIComponent(user.avatar) : '';
+      if (!url) return resolve(fallbackAvatar(user && user.nickname));
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const timer = setTimeout(() => resolve(fallbackAvatar(user && user.nickname)), 5000);
+      img.onload = () => { clearTimeout(timer); resolve(coverCanvas(img)); };
+      img.onerror = () => { clearTimeout(timer); resolve(fallbackAvatar(user && user.nickname)); };
+      img.src = url;
+    });
+  }
+
+  function hashNoise(x, y, seed) {
+    let n = (x * 374761393 + y * 668265263 + seed * 69069) >>> 0;
+    n = Math.imul(n ^ (n >>> 13), 1274126177);
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+  }
+
+  /* 把头像压成铅笔灰阶，再加一组被暗部裁切的排线。后续动画只负责逐步擦出
+     这张素描层，因此不会直接把原头像“刷”出来。 */
+  function buildPencilArt(lum) {
+    const W = PAPER.w, H = PAPER.h;
+    const art = document.createElement('canvas');
+    art.width = W; art.height = H;
+    const g = art.getContext('2d');
+    const im = g.createImageData(W, H);
+    const d = im.data;
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const dark = (255 - lum[i]) / 255;
+        if (dark < 0.045) continue;
+        const tone = smoothstep(0.045, 0.92, dark);
+        const tooth = hashNoise(x, y, 7);
+        const grain = 0.72 + tooth * 0.28;
+        const j = i * 4;
+        d[j] = 58 + tooth * 18;
+        d[j + 1] = 55 + tooth * 16;
+        d[j + 2] = 51 + tooth * 15;
+        d[j + 3] = clamp((0.06 + tone * 0.72) * grain, 0, 0.76) * 255;
+      }
+    }
+    g.putImageData(im, 0, 0);
+
+    // 用低透明度的连续斜线搭一层排线；暗部浓、亮部自然留白。
+    const hatch = document.createElement('canvas');
+    hatch.width = W; hatch.height = H;
+    const h = hatch.getContext('2d');
+    const angles = [-0.88, -0.54, 0.67];
+    const spacing = [8, 13, 10];
+    for (let layer = 0; layer < angles.length; layer++) {
+      const a = angles[layer] + rand(-0.035, 0.035);
+      const dx = Math.cos(a), dy = Math.sin(a);
+      const nx = -dy, ny = dx;
+      const count = Math.ceil((W + H) / spacing[layer]);
+      for (let k = 0; k < count; k++) {
+        const off = -H + k * spacing[layer] + rand(-2.2, 2.2);
+        const ox = W * 0.5 + nx * off;
+        const oy = H * 0.5 + ny * off;
+        // 每一排由长短不一的短线组成，而不是横贯整张画纸的连续长线。
+        let along = -Math.max(W, H) * 0.72;
+        while (along < Math.max(W, H) * 0.72) {
+          const len = rand(18, layer === 2 ? 62 : 88);
+          const gap = rand(2.5, 15);
+          if (Math.random() > 0.16) {
+            h.beginPath();
+            for (let q = 0; q <= 3; q++) {
+              const t = q / 3;
+              const reach = along + t * len;
+              const wobble = Math.sin(t * Math.PI * 1.5 + k * 0.7) * rand(0.15, 1.2);
+              const px = ox + dx * reach + nx * wobble;
+              const py = oy + dy * reach + ny * wobble;
+              if (q) h.lineTo(px, py); else h.moveTo(px, py);
+            }
+            h.strokeStyle = `rgba(48,45,42,${rand(0.06, 0.16)})`;
+            h.lineWidth = rand(0.45, layer === 2 ? 0.9 : 1.2);
+            h.stroke();
+          }
+          along += len + gap;
+        }
+      }
+    }
+    // 排线只留在头像暗部，发丝和衣领的边缘会形成自然的交叉线。
+    const toneMask = document.createElement('canvas');
+    toneMask.width = W; toneMask.height = H;
+    const tg = toneMask.getContext('2d');
+    const mi = tg.createImageData(W, H);
+    for (let i = 0; i < W * H; i++) {
+      const dark = (255 - lum[i]) / 255;
+      mi.data[i * 4 + 3] = smoothstep(0.06, 0.5, dark) * 255;
+    }
+    tg.putImageData(mi, 0, 0);
+    h.globalCompositeOperation = 'destination-in';
+    h.drawImage(toneMask, 0, 0);
+
+    g.globalCompositeOperation = 'multiply';
+    g.drawImage(hatch, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    return art;
+  }
+
+  /* 黑白处理：头像转灰度，再从亮度/边缘生成一笔一笔的铅笔线，
+     按“轮廓—排线—暗部加深”的顺序逐步显现。 */
+  function buildTone(src) {
+    const W = PAPER.w, H = PAPER.h;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    g.filter = 'grayscale(1) contrast(1.22) brightness(1.02)';
+    const drawW = W * 0.82, drawH = drawW * 0.92;
+    const dx = (W - drawW) / 2, dy = 40 + (H * 0.62 - drawH) / 2;
+    g.drawImage(src, dx, dy, drawW, drawH);
+    g.filter = 'none';
+    const im = g.getImageData(0, 0, W, H); const d = im.data;
+    const lum = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) {
+      const j = i * 4;
+      const a0 = d[j + 3] / 255;    // 头像本身的透明度（透明背景不能当黑色）
+      const l = (0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]) | 0;
+      lum[i] = Math.min(255, l + (1 - a0) * 255);
+      d[j + 3] = Math.max(0, Math.min(255, (250 - l) * 1.35 * a0));
+    }
+    g.putImageData(im, 0, 0);
+    c.lum = lum;
+    c.art = buildPencilArt(lum);
+    return c;
+  }
+
+  /* 三个阶段生成笔触：轮廓线、主排线、暗部交叉线。 */
+  function genStrokes(lum) {
+    const W = PAPER.w, H = PAPER.h;
+    const gx = new Float32Array(W * H), gy = new Float32Array(W * H);
+    for (let y = 1; y < H - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x;
+        gx[i] = (lum[i + 1] - lum[i - 1]) + (lum[i + W + 1] - lum[i + W - 1]) + (lum[i - W + 1] - lum[i - W - 1]);
+        gy[i] = (lum[i + W] - lum[i - W]) + (lum[i + W + 1] - lum[i + W - 1]) + (lum[i + W - 1] - lum[i - W - 1]);
+      }
+    }
+    const strokes = [];
+    function addStroke(px, py, angle, len, width, alpha, stage, waviness) {
+      const n = 3 + ((len / 9) | 0) + (stage === 0 ? 1 : 0);
+      const pts = [];
+      let cx = px, cy = py, ang = angle;
+      for (let k = 0; k < n; k++) {
+        pts.push([cx, cy]);
+        ang += rand(-waviness, waviness);
+        cx += Math.cos(ang) * len / (n - 1);
+        cy += Math.sin(ang) * len / (n - 1);
+      }
+      strokes.push({
+        pts, w: width, a: alpha, stage,
+        key: py + px * 0.08 + rand(-18, 18),
+      });
+    }
+
+    // 1. 轮廓：只在梯度较强处落笔，沿边缘切线走，线条略抖。
+    for (let y = 27; y < H * 0.68; y += 4) {
+      for (let x = 24; x < W - 24; x += 4) {
+        const i = y * W + x;
+        const mag = Math.hypot(gx[i], gy[i]);
+        if (mag < 92 || Math.random() > Math.min(0.76, 0.18 + mag / 520)) continue;
+        const px = x + rand(-2.2, 2.2), py = y + rand(-2.2, 2.2);
+        const dark = (255 - lum[i]) / 255;
+        let angle = Math.atan2(gx[i], -gy[i]);
+        if (Math.random() < 0.5) angle += Math.PI;
+        addStroke(px, py, angle, 10 + Math.min(28, mag * 0.055) + dark * 6,
+          0.55 + dark * 1.05, 0.2 + dark * 0.22, 0, 0.16);
+      }
+    }
+
+    // 2. 主排线：统一斜向、长度随明暗变化，不再顺着照片轮廓描边。
+    for (let y = 30; y < H * 0.67; y += 8) {
+      for (let x = 28; x < W - 28; x += 8) {
+        const px = x + rand(-3.5, 3.5), py = y + rand(-3.5, 3.5);
+        const i = (py | 0) * W + (px | 0);
+        const dark = (255 - lum[i]) / 255;
+        if (dark < 0.13 || Math.random() > dark * 0.82) continue;
+        addStroke(px, py, -0.8 + rand(-0.12, 0.12),
+          13 + dark * 29 + rand(0, 9), 0.55 + dark * 0.75,
+          0.09 + dark * 0.17, 1, 0.075);
+      }
+    }
+
+    // 3. 暗部：反方向补短交叉线，同时把五官和发根压深。
+    for (let y = 30; y < H * 0.67; y += 7) {
+      for (let x = 28; x < W - 28; x += 7) {
+        const px = x + rand(-3, 3), py = y + rand(-3, 3);
+        const i = (py | 0) * W + (px | 0);
+        const dark = (255 - lum[i]) / 255;
+        if (dark < 0.38 || Math.random() > 0.24 + dark * 0.58) continue;
+        addStroke(px, py, 0.66 + rand(-0.13, 0.13),
+          10 + dark * 23 + rand(0, 8), 0.5 + dark * 0.7,
+          0.08 + dark * 0.2, 2, 0.085);
+      }
+    }
+    strokes.sort((a, b) => a.stage - b.stage || a.key - b.key);
+    return strokes;
+  }
+
+  function drawStroke(ig, mg, s) {
+    const path = (g2) => {
+      g2.beginPath();
+      g2.moveTo(s.pts[0][0], s.pts[0][1]);
+      for (let k = 1; k < s.pts.length; k++) g2.lineTo(s.pts[k][0], s.pts[k][1]);
+      g2.stroke();
+    };
+    // 深浅分层，让轮廓比排线略重，交叉线留下石墨颗粒感。
+    ig.strokeStyle = s.stage === 0
+      ? `rgba(47,44,40,${s.a})`
+      : `rgba(58,54,49,${s.a * (s.stage === 2 ? 0.94 : 0.82)})`;
+    ig.lineWidth = s.w;
+    ig.lineCap = 'round'; ig.lineJoin = 'round';
+    path(ig);
+    // 遮罩也沿笔路展开，避免以前圆刷一次擦出整块照片。
+    mg.lineCap = 'round'; mg.lineJoin = 'round';
+    mg.strokeStyle = `rgba(255,255,255,${0.2 + Math.min(0.23, s.a * 0.8)})`;
+    mg.lineWidth = 3.8 + s.w * 2.7 + (s.stage === 0 ? 1.8 : 0);
+    path(mg);
+    mg.strokeStyle = 'rgba(255,255,255,.065)';
+    mg.lineWidth += 6;
+    path(mg);
+  }
+
+  /* ================= 纸 / 印章 / 手 ================= */
+  const paperTexture = (() => {
+    const W = PAPER.w, H = PAPER.h;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const im = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const grain = hashNoise(x, y, 3);
+        const fiber = hashNoise((x / 9) | 0, y, 11);
+        im.data[i] = 105;
+        im.data[i + 1] = 88;
+        im.data[i + 2] = 63;
+        im.data[i + 3] = clamp((grain - 0.46) * 13 + (fiber > 0.965 ? 8 : 0), 0, 11);
+      }
+    }
+    g.putImageData(im, 0, 0);
+    g.globalCompositeOperation = 'destination-in';
+    const edge = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.18, W / 2, H / 2, W * 0.7);
+    edge.addColorStop(0, 'rgba(255,255,255,.4)');
+    edge.addColorStop(0.82, 'rgba(255,255,255,.8)');
+    edge.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = edge; g.fillRect(0, 0, W, H);
+    return c;
+  })();
+
+  function drawPaperAt(g, cx, cy, w, h, rot, scale, alpha) {
+    g.save();
+    g.globalAlpha = alpha;
+    g.translate(cx, cy); g.rotate(rot); g.scale(scale, scale);
+    // 纸张阴影
+    g.fillStyle = 'rgba(0,0,0,.32)';
+    roundRect(g, -w / 2 + 10, -h / 2 + 14, w, h, 6); g.fill();
+    // 纸
+    const pg = g.createLinearGradient(0, -h / 2, 0, h / 2);
+    pg.addColorStop(0, '#fffdf7');
+    pg.addColorStop(0.55, '#faf6eb');
+    pg.addColorStop(1, '#f1eadc');
+    g.fillStyle = pg;
+    roundRect(g, -w / 2, -h / 2, w, h, 6); g.fill();
+    g.save();
+    roundRect(g, -w / 2, -h / 2, w, h, 6); g.clip();
+    g.globalAlpha = alpha * 0.72;
+    g.drawImage(paperTexture, -w / 2, -h / 2, w, h);
+    g.restore();
+    g.strokeStyle = 'rgba(120,100,70,.22)'; g.lineWidth = 1.5;
+    roundRect(g, -w / 2, -h / 2, w, h, 6); g.stroke();
+    g.restore();
+  }
+
+  function drawStamp(g, cx, cy, score, rot, alpha) {
+    g.save();
+    g.globalAlpha = alpha;
+    g.translate(cx, cy); g.rotate(rot);
+    g.strokeStyle = 'rgba(190,52,44,.86)';
+    g.lineWidth = 3;
+    roundRect(g, -108, -33, 216, 66, 7); g.stroke();
+    g.lineWidth = 1.4;
+    roundRect(g, -99, -25, 198, 50, 4); g.stroke();
+    g.fillStyle = 'rgba(190,52,44,.9)';
+    g.font = '700 33px "STKaiti","KaiTi","Kaiti SC",serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('评分 ' + score, 0, 1);
+    g.restore();
+  }
+
+  function drawName(g, cx, cy, name, rot, alpha) {
+    g.save();
+    g.globalAlpha = alpha;
+    g.translate(cx, cy); g.rotate(rot);
+    g.fillStyle = 'rgba(46,40,34,.92)';
+    g.font = 'italic 30px "STKaiti","KaiTi","Kaiti SC",serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(name || '', 0, 0);
+    g.restore();
+  }
+
+  /* 双手：Pexels "Hand of a Person Holding a Pencil..." by Tima Miroshnichenko。
+     右手握笔并按笔尖对齐落笔点，左手放在纸后托住纸面。 */
+  const handImg = new Image();
+  const HAND = { tipX: 80, tipY: 68, angle: 0.38, scale: 0.55, w: 1400, h: 620 };
+  let handReady = false;
+  handImg.onload = () => { handReady = true; };
+  handImg.src = '/hand-writer-two-longarm.png';
+
+  const restHandImg = new Image();
+  const REST = { scale: 0.76, w: 580, h: 717 };
+  let restHandReady = false;
+  restHandImg.onload = () => { restHandReady = true; };
+  restHandImg.src = '/hand-rest-two.png';
+
+  function drawHand(g, px, py, ang, alpha) {
+    if (!handReady) return;
+    g.save();
+    g.globalAlpha = alpha;
+    g.translate(px, py);
+    g.rotate(ang - HAND.angle);
+    g.scale(HAND.scale, HAND.scale);
+
+    // 素材自带自然阴影，透明抠图本体直接落纸，避免额外投影形成硬边。
+    g.drawImage(handImg, -HAND.tipX, -HAND.tipY);
+    g.restore();
+  }
+
+  function drawRestHand(g) {
+    if (!restHandReady) return;
+    g.save();
+    g.translate(255, 1960);
+    g.rotate(-0.06);
+    g.scale(REST.scale, REST.scale);
+    g.drawImage(restHandImg, 0, -REST.h);
+    g.restore();
+  }
+
+  /* ================= 页面状态 ================= */
+  const DRAW_T = 12.0;     // 画一张的时长（秒）
+  const IN_T = 0.7, STAMP_T = 1.0, OUT_T = 0.6;
+  const STAGE_WINDOWS = [
+    { stage: 0, from: 0.00, to: 0.29 },   // 先完整勾轮廓
+    { stage: 1, from: 0.34, to: 0.66 },   // 再画内部轻排线
+    { stage: 2, from: 0.71, to: 0.94 },   // 最后区分中间调与暗部
+  ];
+  const state = {
+    queue: [],           // { user, type, prio, ts }
+    seen: new Map(),     // 去重：同一个用户 10 分钟只画一张
+    current: null,       // { user, sketch, mask, dabs, dabIdx, phase, t }
+    stack: [],           // 画好的：{ sketch, name, score, rot }
+    done: 0,
+    online: null,
+    gapUntil: 0,
+  };
+
+  function userKey(u) { return String((u && (u.id || u.nickname)) || ''); }
+
+  function enqueue(m) {
+    if (!m || !m.user) return;
+    const u = m.user;
+    const key = userKey(u);
+    if (!key) return;
+    const now = Date.now();
+    if (now - (state.seen.get(key) || 0) < 10 * 60 * 1000) return;
+    state.seen.set(key, now);
+    if (state.seen.size > 500) state.seen.clear();
+    const prio = m.type === 'gift' ? 2 : (m.type === 'follow' || m.type === 'share' ? 1 : 0);
+    state.queue.push({ user: u, type: m.type || 'enter', prio, ts: now });
+    if (state.queue.length > 25) {
+      // 队列太长丢最早的低优先级
+      let idx = 0;
+      for (let i = 0; i < state.queue.length; i++) if (state.queue[i].prio < state.queue[idx].prio) idx = i;
+      state.queue.splice(idx, 1);
+    }
+  }
+
+  function pickNext() {
+    if (!state.queue.length) return null;
+    let idx = 0;
+    for (let i = 1; i < state.queue.length; i++) {
+      const a = state.queue[i], b = state.queue[idx];
+      if (a.prio > b.prio) idx = i;
+    }
+    return state.queue.splice(idx, 1)[0];
+  }
+
+  async function startNext(now) {
+    if (state.current || now < state.gapUntil) return;
+    const item = pickNext();
+    if (!item) return;
+    const user = item.user;
+    const avatar = await loadAvatar(user);
+    // 加载期间可能已经开始了别的
+    if (state.current) {
+      state.queue.unshift(item);
+      return;
+    }
+    const tone = buildTone(avatar);
+    const strokes = genStrokes(tone.lum);
+    let strokeCursor = 0;
+    const strokeSchedule = STAGE_WINDOWS.map((phase) => {
+      const end = strokeCursor + strokes.filter((s) => s.stage === phase.stage).length;
+      const item = { ...phase, start: strokeCursor, end };
+      strokeCursor = end;
+      return item;
+    });
+    state.current = {
+      user,
+      avatar,
+      tone,
+      strokes,
+      strokeSchedule,
+      strokeIdx: 0,
+      phase: 'in',
+      t: 0,
+      handX: null,
+      handY: null,
+      score: 80 + ((Math.random() * 20) | 0),
+      rot: rand(-0.05, 0.05),
+    };
+    prepareInk();
+  }
+
+  function strokeTargetAt(c, progress) {
+    let target = 0;
+    for (const phase of c.strokeSchedule) {
+      if (progress <= phase.from) break;
+      const f = clamp((progress - phase.from) / (phase.to - phase.from), 0, 1);
+      target = phase.start + Math.floor((phase.end - phase.start) * f);
+    }
+    return Math.min(c.strokes.length, target);
+  }
+
+  function prepareInk() {
+    const c = state.current;
+    c.ink = document.createElement('canvas');
+    c.ink.width = PAPER.w; c.ink.height = PAPER.h;
+    c.inkG = c.ink.getContext('2d');
+    c.mask = document.createElement('canvas');
+    c.mask.width = PAPER.w; c.mask.height = PAPER.h;
+    c.maskG = c.mask.getContext('2d');
+    c.tmp = document.createElement('canvas');
+    c.tmp.width = PAPER.w; c.tmp.height = PAPER.h;
+    c.tmpG = c.tmp.getContext('2d');
+  }
+
+  function finishCurrent() {
+    const c = state.current;
+    if (!c) return;
+    // 成品：铅笔灰阶与排线被完整笔路擦出，再叠一层较深的石墨线。
+    const fin = document.createElement('canvas');
+    fin.width = PAPER.w; fin.height = PAPER.h;
+    const fg = fin.getContext('2d');
+    fg.drawImage(c.tone.art, 0, 0);
+    fg.globalCompositeOperation = 'destination-in';
+    fg.drawImage(c.mask, 0, 0);
+    fg.globalCompositeOperation = 'source-over';
+    fg.globalAlpha = 0.64;
+    fg.drawImage(c.ink, 0, 0);
+    state.stack.push({ sketch: fin, name: c.user.nickname || '神秘观众', score: c.score, rot: rand(-0.09, 0.05) });
+    if (state.stack.length > 5) state.stack.shift();
+    state.done++;
+    state.current = null;
+    state.gapUntil = performance.now() + 500;
+  }
+
+  /* ================= 渲染 ================= */
+  function drawStack(g) {
+    const n = Math.max(3, state.stack.length);
+    for (let i = n - 1; i >= 0; i--) {
+      const item = state.stack[i] || null;
+      const fan = i; // 0 = 最上面
+      const cx = 520 + fan * 14;
+      const cy = 430 - fan * -16 + 60;
+      const w = 620, h = 800;
+      const rot = (item ? item.rot : -0.02 + fan * 0.03);
+      drawPaperAt(g, cx, cy, w, h, rot, 1, 1);
+      if (!item) continue;
+      g.save();
+      g.translate(cx, cy); g.rotate(rot);
+      if (i === 0) {
+        // 最上面那张：素描 + 印章 + 名字
+        g.globalAlpha = 0.95;
+        g.drawImage(item.sketch, -w / 2 + 40, -h / 2 + 30, w - 80, (w - 80) * (PAPER.h / PAPER.w) * 0.82);
+        drawStamp(g, 40, h / 2 - 210, item.score, -0.04, 0.95);
+        drawName(g, 30, h / 2 - 150, item.name, -0.02, 0.95);
+      } else {
+        g.globalAlpha = 0.55;
+        g.drawImage(item.sketch, -w / 2 + 50, -h / 2 + 40, w - 100, (w - 100) * (PAPER.h / PAPER.w) * 0.8);
+      }
+      g.restore();
+    }
+  }
+
+  function drawCurrent(g, now) {
+    const c = state.current;
+    if (!c) {
+      // 空纸：给个淡淡的“待接单”
+      drawPaperAt(g, 720, 1240, 640, 760, 0.03, 1, 1);
+      g.save();
+      g.translate(720, 1240); g.rotate(0.03);
+      g.fillStyle = 'rgba(90,80,66,.28)';
+      g.font = 'italic 44px "STKaiti","KaiTi","Kaiti SC",serif';
+      g.textAlign = 'center';
+      g.fillText('等 待 接 单 …', 0, -40);
+      g.restore();
+      return;
+    }
+    const t = c.t;
+    let alpha = 1, scale = 1, dx = 0, dy = 0;
+    if (c.phase === 'in') {
+      // 新纸从下方滑入，别用淡入（半透明纸会透出桌子很难看）
+      const f = Math.min(1, t / IN_T);
+      const e = 1 - Math.pow(1 - f, 3);
+      scale = 0.94 + 0.06 * e;
+      dy = (1 - e) * 120;
+    } else if (c.phase === 'out') {
+      const f = Math.min(1, t / OUT_T);
+      alpha = 1 - f;
+      scale = 1 - 0.25 * f;
+      dx = 60 * f;
+    }
+    const cx = 720 + dx, cy = 1240 + dy;
+    const rot = 0.03 + c.rot * 0.35;
+
+    drawPaperAt(g, cx, cy, 640, 760, rot, scale, alpha);
+
+    g.save();
+    g.globalAlpha = alpha;
+    g.translate(cx, cy); g.rotate(rot); g.scale(scale, scale);
+
+    // 已画的素描：预先做好的铅笔灰阶被笔路一点点擦出，再叠石墨线。
+    if (c.phase === 'draw' || c.phase === 'stamp' || c.phase === 'out') {
+      c.tmpG.clearRect(0, 0, PAPER.w, PAPER.h);
+      c.tmpG.drawImage(c.tone.art, 0, 0);
+      c.tmpG.globalCompositeOperation = 'destination-in';
+      c.tmpG.drawImage(c.mask, 0, 0);
+      c.tmpG.globalCompositeOperation = 'source-over';
+      g.drawImage(c.tmp, -320, -380, 640, 760);
+      g.globalAlpha = alpha * 0.34;
+      g.drawImage(c.ink, -320, -380, 640, 760);
+      g.globalAlpha = alpha;
+    }
+
+    // 印章 + 名字
+    if (c.phase === 'stamp') {
+      const f = Math.min(1, t / STAMP_T);
+      const pop = f < 0.35 ? 0.6 + (f / 0.35) * 0.55 : 1.15 - Math.min(0.15, (f - 0.35) * 0.5);
+      g.save();
+      g.translate(0, 0); g.scale(pop, pop);
+      drawStamp(g, 20, 300, c.score, -0.05, Math.min(1, f * 2));
+      g.restore();
+      drawName(g, 10, 358, c.user.nickname || '神秘观众', -0.02, Math.min(1, f * 2));
+    }
+    g.restore();
+
+    // 手：只在落笔阶段出现；笔尖有短距离惯性和轻微呼吸，避免逐笔瞬移。
+    if (c.phase === 'draw') {
+      const s2 = c.strokes[Math.max(0, Math.min(c.strokes.length - 1, c.strokeIdx - 1))];
+      if (s2) {
+        const p = s2.pts[s2.pts.length - 1];
+        const px = cx + (p[0] - PAPER.w / 2) * scale;
+        const py = cy + (p[1] - PAPER.h / 2) * scale;
+        if (c.handX == null) {
+          c.handX = px; c.handY = py;
+        } else {
+          c.handX += (px - c.handX) * 0.4;
+          c.handY += (py - c.handY) * 0.4;
+        }
+        drawHand(g, c.handX, c.handY, 0.52 + Math.sin(now / 190) * 0.012, 1);
+      }
+    }
+  }
+
+  function drawPhone(g) {
+    g.save();
+    g.translate(250, 1290); g.rotate(-0.03);
+    // 机身
+    g.fillStyle = 'rgba(0,0,0,.35)';
+    roundRect(g, -142, -312, 300, 624, 40); g.fill();
+    const caseG = g.createLinearGradient(-150, -310, 150, 310);
+    caseG.addColorStop(0, '#3c5a48');
+    caseG.addColorStop(1, '#22362b');
+    g.fillStyle = caseG;
+    roundRect(g, -150, -315, 300, 630, 42); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 2;
+    roundRect(g, -150, -315, 300, 630, 42); g.stroke();
+    // 屏幕
+    g.fillStyle = '#070b08';
+    roundRect(g, -132, -296, 264, 590, 26); g.fill();
+    // 刘海
+    g.fillStyle = '#050705';
+    roundRect(g, -46, -292, 92, 20, 10); g.fill();
+
+    // 状态栏
+    g.fillStyle = 'rgba(235,240,230,.9)';
+    g.font = '600 15px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    g.fillText('09:45', -112, -258);
+    g.textAlign = 'right';
+    g.fillText('5G', 108, -258);
+
+    // 标题栏
+    g.fillStyle = '#0b120c';
+    roundRect(g, -132, -242, 264, 46, 0); g.fill();
+    g.fillStyle = '#e8ead8';
+    g.font = '600 20px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.textAlign = 'center';
+    g.fillText('‹  接 单 画 纸', 0, -211);
+    g.strokeStyle = 'rgba(255,255,255,.08)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(-132, -196); g.lineTo(132, -196); g.stroke();
+
+    const cur = state.current;
+    // 头像区
+    g.save();
+    g.beginPath(); roundRect(g, -112, -176, 224, 224, 10); g.clip();
+    if (cur) {
+      g.drawImage(cur.avatar, -112, -176, 224, 224);
+    } else {
+      const gg = g.createLinearGradient(-112, -176, 112, 48);
+      gg.addColorStop(0, '#18231a'); gg.addColorStop(1, '#0d130e');
+      g.fillStyle = gg; g.fillRect(-112, -176, 224, 224);
+      g.fillStyle = 'rgba(210,220,200,.35)';
+      g.font = '500 22px "PingFang SC","Microsoft YaHei",sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('等待接单中…', 0, -70);
+    }
+    g.restore();
+
+    // 名字
+    g.fillStyle = '#f0f2e6';
+    g.font = '700 26px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(cur ? (cur.user.nickname || '神秘观众') : '—— ——', 0, 84);
+    g.fillStyle = 'rgba(180,190,170,.55)';
+    g.font = '400 16px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText(cur ? '正在素描' : '等单中', 0, 116);
+
+    // 底部数据
+    g.strokeStyle = 'rgba(255,255,255,.08)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(-132, 150); g.lineTo(132, 150); g.stroke();
+    g.fillStyle = 'rgba(200,208,190,.6)';
+    g.font = '400 15px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.textAlign = 'center';
+    g.fillText('剩余', -66, 186);
+    g.fillText('已画', 66, 186);
+    g.fillStyle = '#f3f5ea';
+    g.font = '700 34px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText(String(state.queue.length), -66, 226);
+    g.fillText(String(state.done), 66, 226);
+
+    // home 条
+    g.fillStyle = 'rgba(255,255,255,.35)';
+    roundRect(g, -55, 262, 110, 6, 3); g.fill();
+    g.restore();
+  }
+
+  /* ================= 主循环 ================= */
+  let last = performance.now();
+  let frameAcc = 0;
+  function frame(now) {
+    requestAnimationFrame(frame);
+    const dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+    frameAcc += dt * 60;
+
+    // 推进状态机
+    const c = state.current;
+    if (c) {
+      c.t += dt;
+      if (c.phase === 'in' && c.t >= IN_T) { c.phase = 'draw'; c.t = 0; }
+      else if (c.phase === 'draw') {
+        if (c.t >= DRAW_T) { c.phase = 'stamp'; c.t = 0; }
+      } else if (c.phase === 'stamp' && c.t >= STAMP_T) { c.phase = 'out'; c.t = 0; }
+      else if (c.phase === 'out' && c.t >= OUT_T) { finishCurrent(); }
+    }
+    // 落笔
+    const cc = state.current;
+    if (cc && cc.phase === 'draw') {
+      const target = strokeTargetAt(cc, cc.t / DRAW_T);
+      while (cc.strokeIdx < target) drawStroke(cc.inkG, cc.maskG, cc.strokes[cc.strokeIdx++]);
+    }
+    startNext(now);
+
+    if (frameAcc < 2) return;   // ~30fps
+    frameAcc = 0;
+
+    ctx.drawImage(bg, 0, 0);
+    drawStack(ctx);
+    drawCurrent(ctx, now);
+    drawRestHand(ctx);
+    drawPhone(ctx);
+  }
+  requestAnimationFrame(frame);
+
+  /* ================= 事件 ================= */
+  function onMessage(m) {
+    if (!m || !m.type) return;
+    if (m.type === 'hello') { if (m.online != null) state.online = m.online; return; }
+    if (m.type === 'stats') { if (m.online != null) state.online = m.online; return; }
+    if (['enter', 'gift', 'follow', 'share', 'like', 'chat'].includes(m.type)) enqueue(m);
+  }
+
+  let ws = null;
+  function connect() {
+    try { ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/events'); }
+    catch (e) { setTimeout(connect, 2000); return; }
+    ws.onopen = () => {};
+    ws.onmessage = (e) => { try { onMessage(JSON.parse(e.data)); } catch (err) {} };
+    ws.onclose = () => setTimeout(connect, 2000);
+    ws.onerror = () => {};
+  }
+  if (!DEMO) connect();
+
+  /* 演示：随机生成接单 */
+  if (DEMO) {
+    const names = ['林间晚风', '花开半夏', '南巷旧人', '晚风轻语', '山海不眠', '小鹿乱撞'];
+    let n = 0;
+    setInterval(() => {
+      if (state.queue.length + (state.current ? 1 : 0) > 3) return;
+      n++;
+      enqueue({
+        type: ['enter', 'gift', 'follow'][n % 3],
+        user: {
+          id: 'demo_' + n,
+          nickname: names[n % names.length] + n,
+          avatar: `https://api.dicebear.com/7.x/adventurer/png?seed=demo${n}`,
+        },
+      });
+    }, 2500);
+  }
+
+  // 调试入口
+  window.__sketch = {
+    push: enqueue,
+    state: () => ({
+      queue: state.queue.length,
+      done: state.done,
+      phase: state.current ? state.current.phase : 'idle',
+      name: state.current ? state.current.user.nickname : null,
+      stack: state.stack.length,
+    }),
+  };
+})();
+</script>
+</body>
+</html>

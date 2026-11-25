@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>直播间互动叠加层</title>
+<style>
+  :root{
+    --gold:#f5c26b;
+    --gold-dim:#a97a33;
+    --pink:#ff5d8f;
+    --blue:#3ad1ff;
+    --panel-bg:rgba(12,10,14,.82);
+    --panel-border:rgba(245,194,107,.35);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    width:100%;height:100%;overflow:hidden;background:transparent;
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    color:#fff;-webkit-font-smoothing:antialiased;
+    user-select:none;
+  }
+  #fx{position:fixed;inset:0;pointer-events:none;z-index:5}
+
+  /* ============ 左侧队列面板 ============ */
+  .queue{
+    position:fixed;left:36px;top:36px;z-index:10;
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .led{
+    padding:14px 26px;border-radius:8px;
+    background:linear-gradient(180deg,#1a1116,#0a0708);
+    border:1px solid rgba(255,80,60,.45);
+    box-shadow:0 0 24px rgba(255,60,40,.25),inset 0 0 20px rgba(255,40,20,.12);
+    position:relative;overflow:hidden;
+  }
+  .led::after{
+    content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.35) 0 1px,transparent 1px 3px);
+    pointer-events:none;
+  }
+  .led-label{font-size:15px;color:#ff8a6a;letter-spacing:.35em;margin-right:14px;
+    text-shadow:0 0 10px rgba(255,90,60,.9)}
+  .led-value{font-size:30px;font-weight:800;letter-spacing:.05em;
+    color:#ff5a3c;text-shadow:0 0 8px #ff3b1f,0 0 22px rgba(255,60,20,.8);
+    font-variant-numeric:tabular-nums}
+  .led-value small{font-size:16px;font-weight:600;margin-left:4px}
+
+  /* ============ 右侧规则面板 ============ */
+  .rules{
+    position:fixed;right:36px;top:36px;width:290px;z-index:10;
+    display:flex;flex-direction:column;gap:16px;
+  }
+  .card{
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:14px;padding:16px 18px;
+    backdrop-filter:blur(14px);
+    box-shadow:0 10px 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .card h3{
+    font-size:16px;font-weight:700;color:var(--gold);
+    text-align:center;margin-bottom:12px;letter-spacing:.12em;
+    text-shadow:0 0 12px rgba(245,194,107,.5);
+  }
+  .row{
+    display:flex;align-items:center;gap:10px;
+    padding:6px 0;font-size:13.5px;color:#e8e0d5;
+    border-bottom:1px dashed rgba(255,255,255,.06);
+  }
+  .row:last-child{border-bottom:none}
+  .row .ico{width:20px;text-align:center;font-size:15px}
+  .row .txt{flex:1;color:#ddd6ca}
+  .row .arrow{color:var(--gold-dim);font-size:11px}
+  .row .val{color:var(--gold);font-weight:700;font-size:13px}
+
+  /* ============ 进场飘屏 ============ */
+  .feed{
+    position:fixed;left:0;right:0;bottom:120px;z-index:8;
+    height:420px;overflow:hidden;pointer-events:none;
+    display:flex;flex-direction:column-reverse;align-items:flex-start;
+    padding-left:36px;
+  }
+  .enter-item{
+    display:flex;align-items:center;gap:10px;
+    margin-top:8px;padding:7px 18px 7px 8px;border-radius:999px;
+    background:linear-gradient(90deg,rgba(10,8,12,.92),rgba(10,8,12,.55));
+    border:1px solid rgba(58,209,255,.28);
+    box-shadow:0 4px 20px rgba(0,0,0,.45),0 0 18px rgba(58,209,255,.14);
+    animation:slideIn .5s cubic-bezier(.2,1.2,.4,1) both;
+    max-width:420px;
+  }
+  .enter-item.out{animation:fadeUp .6s ease both}
+  .enter-item img{
+    width:34px;height:34px;border-radius:50%;object-fit:cover;
+    border:1.5px solid rgba(58,209,255,.6);background:#222;
+  }
+  .enter-item .tag{font-size:11px;color:var(--blue);letter-spacing:.1em;
+    padding:2px 6px;border:1px solid rgba(58,209,255,.4);border-radius:4px}
+  .enter-item .name{font-size:15px;font-weight:600;color:#fff;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .enter-item .uid{font-size:11px;color:rgba(255,255,255,.32);white-space:nowrap}
+
+  /* 弹幕气泡 */
+  .chat-item{
+    display:flex;align-items:center;gap:9px;
+    margin-top:8px;padding:6px 16px 6px 7px;border-radius:999px;
+    background:linear-gradient(90deg,rgba(14,10,16,.9),rgba(14,10,16,.4));
+    border:1px solid rgba(255,255,255,.1);
+    animation:slideIn .5s cubic-bezier(.2,1.2,.4,1) both;
+    max-width:520px;
+  }
+  .chat-item.out{animation:fadeUp .6s ease both}
+  .chat-item img{width:28px;height:28px;border-radius:50%;object-fit:cover;background:#222}
+  .chat-item .name{font-size:13px;color:var(--gold);font-weight:600;white-space:nowrap}
+  .chat-item .msg{font-size:14px;color:#e9e4dd;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+
+  @keyframes slideIn{
+    from{opacity:0;transform:translateX(-70px) scale(.9)}
+    to{opacity:1;transform:translateX(0) scale(1)}
+  }
+  @keyframes fadeUp{
+    to{opacity:0;transform:translateY(-26px) scale(.94)}
+  }
+
+  /* ============ 送礼大特效 ============ */
+  .gift-stage{
+    position:fixed;left:50%;bottom:210px;transform:translateX(-50%);
+    z-index:20;pointer-events:none;display:flex;flex-direction:column;
+    align-items:center;
+  }
+  .gift-enter{animation:giftPop .55s cubic-bezier(.2,1.6,.4,1) both}
+  .gift-leave{animation:giftOut .5s ease-in both}
+
+  .halo{
+    position:absolute;left:50%;top:50%;width:300px;height:300px;
+    margin:-150px 0 0 -150px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,93,143,.45) 0%,rgba(255,93,143,0) 62%);
+    animation:pulse 1.2s ease-out infinite;
+  }
+  .avatar-ring{
+    position:relative;z-index:2;width:150px;height:150px;border-radius:50%;
+    padding:5px;
+    background:conic-gradient(from 0deg,var(--pink),var(--gold),var(--blue),var(--pink));
+    animation:spin 3s linear infinite;
+    box-shadow:0 0 45px rgba(255,93,143,.65);
+  }
+  .avatar-ring img{
+    width:100%;height:100%;border-radius:50%;object-fit:cover;
+    background:#111;display:block;animation:spin 3s linear infinite reverse;
+  }
+  .gift-name{
+    position:relative;z-index:2;
+    margin-top:14px;font-size:15px;letter-spacing:.2em;color:var(--gold);
+    text-shadow:0 0 14px rgba(245,194,107,.9),0 2px 8px rgba(0,0,0,.95);
+  }
+  .gift-count{
+    position:relative;z-index:2;
+    font-size:34px;font-weight:900;font-style:italic;
+    background:linear-gradient(180deg,#fff,var(--gold) 60%,#ff9f43);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 16px rgba(255,160,60,.8));
+    line-height:1.1;
+  }
+  .gift-user{
+    position:relative;z-index:2;
+    margin-top:8px;font-size:18px;font-weight:700;color:#fff;
+    text-shadow:0 2px 12px rgba(0,0,0,.95),0 0 20px rgba(0,0,0,.8);
+    white-space:nowrap;
+  }
+  .gift-user small{font-size:11px;color:rgba(255,255,255,.4);margin-left:6px;font-weight:400}
+
+  /* 注意：gift-stage 本身已经 translateX(-50%) 居中，关键帧里不能再写一次，
+     否则会横向偏移两次（之前卡片飞出画面就是这个原因） */
+  @keyframes giftPop{
+    from{opacity:0;transform:translateY(60px) scale(.55)}
+    to{opacity:1;transform:translateY(0) scale(1)}
+  }
+  @keyframes giftOut{
+    to{opacity:0;transform:translateY(-70px) scale(1.12)}
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse{
+    0%{transform:scale(.7);opacity:.85}
+    100%{transform:scale(1.5);opacity:0}
+  }
+
+  /* 关注提示 */
+  .follow-toast{
+    position:fixed;left:50%;top:120px;transform:translateX(-50%);
+    z-index:22;display:flex;align-items:center;gap:10px;
+    padding:10px 26px 10px 10px;border-radius:999px;
+    background:linear-gradient(90deg,rgba(245,194,107,.18),rgba(12,10,14,.9));
+    border:1px solid rgba(245,194,107,.5);
+    box-shadow:0 0 30px rgba(245,194,107,.25);
+    animation:toastIn .5s cubic-bezier(.2,1.4,.4,1) both;
+  }
+  .follow-toast img{width:36px;height:36px;border-radius:50%;object-fit:cover}
+  .follow-toast b{color:var(--gold);font-size:15px}
+  .follow-toast span{color:#ddd;font-size:14px}
+  .follow-toast.out{animation:toastOut .5s ease both}
+  @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-24px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  @keyframes toastOut{to{opacity:0;transform:translateX(-50%) translateY(-24px)}}
+
+  /* 连接状态 */
+  .conn{
+    position:fixed;left:36px;bottom:24px;z-index:30;font-size:11px;
+    color:rgba(255,255,255,.35);letter-spacing:.1em;
+    display:flex;align-items:center;gap:6px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:#f66;box-shadow:0 0 8px #f66}
+  .dot.on{background:#3f6;box-shadow:0 0 8px #3f6}
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+
+<div class="queue">
+  <div class="led">
+    <span class="led-label">当前排队</span>
+    <span class="led-value" id="queueNum">0</span><small style="color:#ff8a6a">人</small>
+  </div>
+  <div class="led">
+    <span class="led-label">正在打印</span>
+    <span class="led-value" id="nowPrint" style="font-size:22px">空闲中</span>
+  </div>
+</div>
+
+<div class="rules">
+  <div class="card">
+    <h3>礼物优先打印</h3>
+    <div class="row"><span class="ico">💗</span><span class="txt">小心心</span><span class="arrow">→</span><span class="val">超大</span></div>
+    <div class="row"><span class="ico">🍭</span><span class="txt">棒棒糖</span><span class="arrow">→</span><span class="val">超大×3</span></div>
+    <div class="row"><span class="ico">💐</span><span class="txt">鲜花</span><span class="arrow">→</span><span class="val">超大×5</span></div>
+    <div class="row"><span class="ico">🍺</span><span class="txt">大啤酒</span><span class="arrow">→</span><span class="val">超大×2</span></div>
+    <div class="row"><span class="ico">🎁</span><span class="txt">5 抖币+</span><span class="arrow">→</span><span class="val">大张</span></div>
+    <div class="row"><span class="ico">⭐</span><span class="txt">100 抖币+</span><span class="arrow">→</span><span class="val">超大</span></div>
+  </div>
+  <div class="card">
+    <h3>互动打印</h3>
+    <div class="row"><span class="ico">👍</span><span class="txt">点赞 20 下</span><span class="arrow">→</span><span class="val">打印</span></div>
+    <div class="row"><span class="ico">💬</span><span class="txt">评论「打印」</span><span class="arrow">→</span><span class="val">大张</span></div>
+    <div class="row"><span class="ico">❤️</span><span class="txt">关注</span><span class="arrow">→</span><span class="val">打印</span></div>
+    <div class="row"><span class="ico">↗️</span><span class="txt">分享</span><span class="arrow">→</span><span class="val">打印</span></div>
+    <div class="row"><span class="ico">🚪</span><span class="txt">进直播间</span><span class="arrow">→</span><span class="val">打印</span></div>
+    <div class="row"><span class="ico">⏱️</span><span class="txt">每 5 分钟</span><span class="arrow">→</span><span class="val">抽 1 人</span></div>
+  </div>
+</div>
+
+<div class="feed" id="feed"></div>
+<div id="giftStage"></div>
+<div id="toastStage"></div>
+
+<div class="conn"><span class="dot" id="dot"></span><span id="connText">连接中…</span></div>
+
+<script>
+/* ================= 粒子特效 ================= */
+const fx = document.getElementById('fx');
+const ctx = fx.getContext('2d');
+let dpr = Math.min(window.devicePixelRatio || 1, 2);
+function resize(){
+  fx.width = innerWidth * dpr;
+  fx.height = innerHeight * dpr;
+  fx.style.width = innerWidth + 'px';
+  fx.style.height = innerHeight + 'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+resize(); addEventListener('resize', resize);
+
+const particles = [];
+function burst(x, y, colors, n = 60, power = 9){
+  for (let i = 0; i < n; i++){
+    const a = Math.random() * Math.PI * 2;
+    const sp = (0.35 + Math.random()) * power;
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp - 2,
+      life: 1,
+      decay: 0.008 + Math.random() * 0.016,
+      size: 1.5 + Math.random() * 4.5,
+      color: colors[(Math.random() * colors.length) | 0],
+      spin: Math.random() * 6,
+    });
+  }
+}
+
+let t0 = performance.now();
+function loop(t){
+  const dt = Math.min((t - t0) / 16.67, 3); t0 = t;
+  ctx.clearRect(0, 0, innerWidth, innerHeight);
+  for (let i = particles.length - 1; i >= 0; i--){
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 0.22 * dt;
+    p.vx *= 0.985;
+    p.life -= p.decay * dt;
+    if (p.life <= 0){ particles.splice(i, 1); continue; }
+    ctx.globalAlpha = Math.max(p.life, 0);
+    ctx.fillStyle = p.color;
+    ctx.shadowBlur = 14;
+    ctx.shadowColor = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ================= 队列状态 ================= */
+let queue = 0;
+let printing = 0;
+const queueEl = document.getElementById('queueNum');
+const nowEl = document.getElementById('nowPrint');
+const printQueue = [];
+let printingName = null;
+
+function addToQueue(user){
+  printQueue.push(user);
+  queue = printQueue.length + (printingName ? 1 : 0);
+  queueEl.textContent = queue;
+  if (!printingName) pumpPrint();
+}
+function pumpPrint(){
+  if (printingName || !printQueue.length) return;
+  const u = printQueue.shift();
+  printingName = u.nickname;
+  nowEl.textContent = printingName;
+  queueEl.textContent = printQueue.length + 1;
+  setTimeout(() => {
+    printingName = null;
+    nowEl.textContent = '空闲中';
+    queueEl.textContent = printQueue.length;
+    pumpPrint();
+  }, 5000 + Math.random() * 3000);
+}
+
+/* ================= 进场 / 弹幕飘屏 ================= */
+const feed = document.getElementById('feed');
+const MAX_FEED = 6;
+
+function pushFeed(el, ms = 6000){
+  feed.insertBefore(el, feed.firstChild);
+  while (feed.children.length > MAX_FEED) feed.lastChild.remove();
+  setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 700);
+  }, ms);
+}
+
+function el(tag, cls, html){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+}
+
+function onEnter(ev){
+  const u = ev.user || {};
+  const item = el('div', 'enter-item');
+  item.innerHTML =
+    `<img src="${u.avatar || ''}" onerror="this.style.visibility='hidden'">` +
+    `<span class="tag">进直播间</span>` +
+    `<span class="name">${escapeHtml(u.nickname || '')}</span>` +
+    `<span class="uid">${u.shortId || u.id || ''}</span>`;
+  pushFeed(item, 5500);
+  addToQueue(u);
+}
+
+function onChat(ev){
+  const u = ev.user || {};
+  const item = el('div', 'chat-item');
+  item.innerHTML =
+    `<img src="${u.avatar || ''}" onerror="this.style.visibility='hidden'">` +
+    `<span class="name">${escapeHtml(u.nickname || '')}</span>` +
+    `<span class="msg">${escapeHtml(ev.text || '')}</span>`;
+  pushFeed(item, 6500);
+}
+
+/* ================= 送礼大特效 ================= */
+const stage = document.getElementById('giftStage');
+const GIFT_COLORS = ['#ff5d8f', '#f5c26b', '#3ad1ff', '#ff9f43', '#ffffff'];
+
+function onGift(ev){
+  const u = ev.user || {};
+  const g = ev.gift || {};
+  const node = el('div', 'gift-stage gift-enter');
+  node.innerHTML = `
+    <div class="halo"></div>
+    <div class="avatar-ring"><img src="${u.avatar || ''}" onerror="this.style.visibility='hidden'"></div>
+    <div class="gift-name">${escapeHtml(g.name || '礼物')}</div>
+    <div class="gift-count">×${ev.count || 1}</div>
+    <div class="gift-user">${escapeHtml(u.nickname || '')}<small>${u.shortId || u.id || ''}</small></div>
+  `;
+  // 同屏最多两个，旧的挤掉
+  while (stage.children.length >= 2) stage.firstChild.remove();
+  stage.appendChild(node);
+
+  const r = node.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height - 40;   // 从卡片下方炸开，不遮头像
+  burst(cx, cy, GIFT_COLORS, 55, 13);
+  setTimeout(() => burst(cx, cy, GIFT_COLORS, 30, 8), 240);
+
+  setTimeout(() => {
+    node.classList.remove('gift-enter');
+    node.classList.add('gift-leave');
+    setTimeout(() => node.remove(), 600);
+  }, 3600);
+}
+
+/* ================= 关注提示 ================= */
+const toastStage = document.getElementById('toastStage');
+function onFollow(ev){
+  const u = ev.user || {};
+  const node = el('div', 'follow-toast');
+  node.innerHTML = `<img src="${u.avatar || ''}" onerror="this.style.visibility='hidden'">
+    <div><b>${escapeHtml(u.nickname || '')}</b> <span>关注了主播 ❤</span></div>`;
+  toastStage.appendChild(node);
+  const r = node.getBoundingClientRect();
+  burst(r.left + r.width / 2, r.top + r.height / 2, ['#f5c26b', '#fff3c4'], 40, 8);
+  setTimeout(() => {
+    node.classList.add('out');
+    setTimeout(() => node.remove(), 600);
+  }, 2600);
+}
+
+/* ================= 分享 / 点赞 ================= */
+function onShare(ev){
+  const u = ev.user || {};
+  const node = el('div', 'follow-toast');
+  node.innerHTML = `<img src="${u.avatar || ''}" onerror="this.style.visibility='hidden'">
+    <div><b>${escapeHtml(u.nickname || '')}</b> <span>分享了直播间 ↗</span></div>`;
+  toastStage.appendChild(node);
+  setTimeout(() => { node.classList.add('out'); setTimeout(() => node.remove(), 600); }, 2400);
+}
+
+let likeAccum = 0, likeTimer = null;
+function onLike(ev){
+  likeAccum += ev.count || 0;
+  if (likeTimer) return;
+  likeTimer = setTimeout(() => {
+    const n = likeAccum; likeAccum = 0; likeTimer = null;
+    if (n < 10) return;
+    // 点赞从右下角飘出爱心
+    for (let i = 0; i < Math.min(n, 30); i++){
+      setTimeout(() => burst(innerWidth * 0.82 + Math.random() * 120,
+        innerHeight * 0.78 + Math.random() * 60, ['#ff5d8f', '#ff8fb3', '#f5c26b'], 6, 5), i * 28);
+    }
+  }, 400);
+}
+
+/* ================= 工具 ================= */
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ================= 事件接入 ================= */
+const dot = document.getElementById('dot');
+const connText = document.getElementById('connText');
+const HANDLERS = { enter: onEnter, chat: onChat, gift: onGift, follow: onFollow, share: onShare, like: onLike };
+
+function connect(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/events`);
+  ws.onopen = () => {
+    dot.classList.add('on');
+    connText.textContent = '已连接直播间';
+  };
+  ws.onclose = () => {
+    dot.classList.remove('on');
+    connText.textContent = '断开，重连中…';
+    setTimeout(connect, 2000);
+  };
+  ws.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch (err) { return; }
+    if (ev.type === 'stats'){
+      if (ev.online != null) connText.textContent = `已连接 · 在线 ${ev.online}`;
+      return;
+    }
+    const h = HANDLERS[ev.type];
+    if (h) h(ev);
+  };
+}
+connect();
+
+/* 演示模式：URL 加 ?demo=1 本地造数据，不连服务器也能看效果 */
+if (new URLSearchParams(location.search).has('demo')){
+  const names = ['小鹿乱撞', '一只咸鱼', '夜航船', '阿May', '甜筒不加冰', '橘子汽水'];
+  const gifts = [{ name: '小心心' }, { name: '棒棒糖' }, { name: '鲜花' }, { name: '大啤酒' }, { name: '抖音一号' }];
+  const pick = (a) => a[(Math.random() * a.length) | 0];
+  setInterval(() => {
+    const nickname = pick(names) + ((Math.random() * 90) | 0);
+    const user = { id: String(7000000000000 + ((Math.random() * 999999) | 0)), nickname,
+      shortId: String((Math.random() * 99999999) | 0),
+      avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(nickname)}` };
+    const r = Math.random();
+    if (r < .5) onEnter({ user, online: 20 });
+    else if (r < .8) onChat({ user, text: pick(['主播好', '打印！', '666', '第一次来']) });
+    else if (r < .96) onGift({ user, gift: pick(gifts), count: 1 + ((Math.random() * 3) | 0) });
+    else onFollow({ user });
+  }, 1500);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>直播间礼物监控 · 控制台</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#141821; --panel-2:#1b2029;
+    --line:#252b36; --text:#e6e9ef; --dim:#7c8698;
+    --gold:#f5c26b; --pink:#ff5d8f; --green:#3ddc97; --red:#ff5c5c; --blue:#4dc9ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1200px 600px at 80% -10%,#1a2030 0%,var(--bg) 55%) fixed;
+    color:var(--text);font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    padding:40px 24px;display:flex;justify-content:center;
+  }
+  .wrap{width:100%;max-width:880px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:28px}
+  .logo{
+    width:44px;height:44px;border-radius:12px;flex:none;
+    background:linear-gradient(135deg,var(--pink),var(--gold));
+    display:grid;place-items:center;font-size:22px;
+    box-shadow:0 8px 28px rgba(255,93,143,.35);
+  }
+  h1{font-size:20px;font-weight:700;letter-spacing:.02em}
+  header .sub{font-size:12.5px;color:var(--dim);margin-top:3px}
+
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:22px;margin-bottom:18px;
+  }
+  .label{font-size:13px;color:var(--dim);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .label .hint{font-size:11.5px;color:#5b6474}
+
+  .input-row{display:flex;gap:10px}
+  input[type=text]{
+    flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;
+    padding:13px 16px;color:var(--text);font-size:14.5px;font-family:inherit;outline:none;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  input[type=text]::placeholder{color:#4e5766}
+  input[type=text]:focus{border-color:var(--pink);box-shadow:0 0 0 3px rgba(255,93,143,.13)}
+
+  button{
+    border:none;border-radius:11px;padding:0 22px;height:46px;
+    font-size:14.5px;font-weight:600;font-family:inherit;cursor:pointer;
+    transition:transform .1s,filter .15s,opacity .15s;
+  }
+  button:active{transform:scale(.97)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .btn-primary{background:linear-gradient(135deg,var(--pink),#ff8a5c);color:#fff;
+    box-shadow:0 6px 22px rgba(255,93,143,.3)}
+  .btn-primary:hover:not(:disabled){filter:brightness(1.1)}
+  .btn-ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--line)}
+  .btn-ghost:hover:not(:disabled){background:#232935}
+
+  .status-line{display:flex;align-items:center;gap:10px;margin-top:16px;font-size:13.5px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;background:#4a5261;transition:background .2s}
+  .dot.live{background:var(--green);box-shadow:0 0 10px var(--green);animation:breathe 1.8s ease-in-out infinite}
+  .dot.warn{background:var(--gold);box-shadow:0 0 10px var(--gold)}
+  .dot.err{background:var(--red);box-shadow:0 0 10px var(--red)}
+  @keyframes breathe{50%{opacity:.45}}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}
+  .stat{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .stat .k{font-size:11.5px;color:var(--dim);letter-spacing:.06em;margin-bottom:6px}
+  .stat .v{font-size:23px;font-weight:700;font-variant-numeric:tabular-nums}
+  .stat .v.gold{color:var(--gold)}
+  .stat .v.pink{color:var(--pink)}
+  .stat .v.blue{color:var(--blue)}
+  .stat .v.green{color:var(--green)}
+
+  .actions{display:flex;gap:10px;flex-wrap:wrap}
+  a.open-studio{
+    display:inline-flex;align-items:center;gap:9px;height:46px;padding:0 22px;
+    border-radius:11px;text-decoration:none;color:#04120c;font-weight:700;font-size:14.5px;
+    background:linear-gradient(135deg,var(--green,#5ee0a0),#b7f5d6);
+    box-shadow:0 6px 22px rgba(94,224,160,.22);transition:filter .15s,transform .1s;
+  }
+  a.open-studio:hover{filter:brightness(1.08)}
+  a.open-studio:active{transform:scale(.97)}
+  a.open-stats{
+    display:inline-flex;align-items:center;gap:9px;height:46px;padding:0 22px;
+    border-radius:11px;text-decoration:none;color:#1a1206;font-weight:700;font-size:14.5px;
+    background:linear-gradient(135deg,var(--gold,#f5c26b),#ffe7a8);
+    box-shadow:0 6px 22px rgba(245,194,107,.24);transition:filter .15s,transform .1s;
+  }
+  a.open-stats:hover{filter:brightness(1.08)}
+  a.open-stats:active{transform:scale(.97)}
+  a.open-sketch{
+    display:inline-flex;align-items:center;gap:9px;height:46px;padding:0 22px;
+    border-radius:11px;text-decoration:none;color:#10201c;font-weight:700;font-size:14.5px;
+    background:linear-gradient(135deg,#f4efe3,#d9cbb4);
+    box-shadow:0 6px 22px rgba(217,203,180,.22);transition:filter .15s,transform .1s;
+  }
+  a.open-sketch:hover{filter:brightness(1.06)}
+  a.open-sketch:active{transform:scale(.97)}
+
+  .tip{font-size:12.5px;color:var(--dim);line-height:1.85;margin-top:14px}
+  .tip code{background:#0f131a;border:1px solid var(--line);border-radius:5px;
+    padding:1.5px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--gold)}
+
+  .banner{
+    display:none;margin-top:14px;padding:12px 16px;border-radius:11px;font-size:13.5px;line-height:1.7;
+    background:rgba(245,194,107,.1);border:1px solid rgba(245,194,107,.32);color:#f0d9a8;
+  }
+  .banner.show{display:block}
+  .voice-row{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:2px}
+  .switch{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;font-size:14px}
+  .switch input{appearance:none;width:38px;height:22px;border-radius:99px;background:#2a3140;position:relative;
+    transition:background .18s;cursor:pointer;flex:0 0 auto;margin:0;border:1px solid var(--line)}
+  .switch input::after{content:'';position:absolute;left:3px;top:2px;width:16px;height:16px;border-radius:50%;
+    background:#8792a6;transition:transform .18s,background .18s}
+  .switch input:checked{background:rgba(255,93,143,.28);border-color:rgba(255,93,143,.5)}
+  .switch input:checked::after{transform:translateX(16px);background:var(--pink)}
+  .voice-row .num{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--muted)}
+  .voice-row input[type=number],.voice-row input[type=range]{background:var(--panel-2);border:1px solid var(--line);
+    border-radius:9px;color:var(--text);padding:6px 9px;font:inherit;font-size:13px}
+  .voice-row input[type=number]{width:64px}
+  .voice-row input[type=range]{padding:0;height:22px;width:110px;accent-color:var(--pink)}
+  .btn-mini{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:9px;
+    padding:7px 13px;font:inherit;font-size:13px;cursor:pointer}
+  .btn-mini:hover{background:#232935}
+  .tts-tip{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6}
+  .banner.err{background:rgba(255,92,92,.1);border-color:rgba(255,92,92,.35);color:#ffb3b3}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🎁</div>
+    <div>
+      <h1>直播间礼物监控</h1>
+      <div class="sub">输入直播间地址，实时展示每一位观众的送礼信息</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="label">
+      直播间地址
+      <span class="hint">支持完整链接、分享链接或纯房间号</span>
+    </div>
+    <div class="input-row">
+      <input type="text" id="roomInput" placeholder="https://live.douyin.com/628867104859  或直接输入 628867104859"
+             autocomplete="off" spellcheck="false">
+      <button class="btn-primary" id="startBtn">开始监控</button>
+    </div>
+
+    <div class="status-line">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">未连接</span>
+    </div>
+
+    <div class="banner" id="banner"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="k">在线观众</div><div class="v blue" id="stOnline">—</div></div>
+      <div class="stat"><div class="k">收到礼物</div><div class="v pink" id="stGift">0</div></div>
+      <div class="stat"><div class="k">进场人次</div><div class="v green" id="stEnter">0</div></div>
+      <div class="stat"><div class="k">弹幕条数</div><div class="v gold" id="stChat">0</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="actions">
+      <a class="open-studio" href="/studio" target="_blank" id="studioLink">
+        <span>🧊</span><span>我的 3D 工作室</span>
+      </a>
+      <a class="open-stats" href="/stats" target="_blank" id="statsLink">
+        <span>📊</span><span>打开队列信息页</span>
+      </a>
+      <a class="open-sketch" href="/sketch" target="_blank" id="sketchLink">
+        <span>✏️</span><span>接单画纸（竖屏）</span>
+      </a>
+      <button class="btn-ghost" id="stopBtn" disabled>断开监控</button>
+    </div>
+    <div class="tip">
+      3D 工作室和队列信息页都可以直接用作 OBS 浏览器源，宽高建议 <code>1920×1080</code>，背景透明。<br>
+      打印画面（<code>/studio</code>）和队列信息（<code>/stats</code>）是两页，同时打开即可：<code>/stats</code> 竖屏 1080×1920 显示打印规则、正在打印和实时队列。<br>
+      <code>/studio</code> 右下角可切全景 / 特写和横屏 / 竖屏，竖屏会按 9:16 渲染两侧补黑边。<br>
+      如果提示未登录，礼物消息收不到，请在终端运行 <code>npm run login</code> 扫码登录一次。
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">
+      语音播报
+      <span class="hint">用浏览器自带中文语音念吉利话，3D 工作室和信息页都会出声</span>
+    </div>
+    <div class="voice-row">
+      <label class="switch"><input type="checkbox" id="vEnabled"> 开启语音</label>
+      <label class="switch"><input type="checkbox" id="vEnter"> 进场欢迎</label>
+      <label class="switch"><input type="checkbox" id="vGift"> 送礼答谢</label>
+      <span class="num">进场冷却 <input type="number" id="vCooldown" min="0" max="600" step="5"> 秒</span>
+      <span class="num">音量 <input type="range" id="vVolume" min="0" max="1" step="0.05"></span>
+      <button class="btn-mini" id="vTest">试听</button>
+    </div>
+    <div class="tts-tip" id="vTip">
+      没有声音？浏览器不允许页面未交互就自动播放：先点一下 3D 工作室页面，或用带 <code>?demo=1</code> 的地址调音量。
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const dot = $('dot'), statusText = $('statusText');
+const banner = $('banner');
+
+let status = null;
+let ws = null;
+
+function setBanner(text, isError){
+  if (!text){ banner.className = 'banner'; banner.textContent = ''; return; }
+  banner.className = 'banner show' + (isError ? ' err' : '');
+  banner.textContent = text;
+}
+
+function render(){
+  const running = status?.running;
+  const room = status?.room;
+
+  if (running){
+    dot.className = 'dot live';
+    statusText.textContent = `监控中 · 房间 ${room?.webRid || ''}`;
+  } else if (status?.lastError){
+    dot.className = 'dot err';
+    statusText.textContent = '出错了';
+  } else {
+    dot.className = 'dot';
+    statusText.textContent = '未连接';
+  }
+
+  if (running && status?.loggedIn === false){
+    dot.className = 'dot warn';
+    setBanner('当前未登录：进场、弹幕、点赞能收到，但【礼物消息收不到】。请在终端运行 npm run login 扫码登录一次。', false);
+  } else if (status?.lastError){
+    setBanner(status.lastError, true);
+  } else {
+    setBanner('');
+  }
+
+  $('stOnline').textContent = status?.online ?? '—';
+  $('stGift').textContent = status?.counters?.gift ?? 0;
+  $('stEnter').textContent = status?.counters?.enter ?? 0;
+  $('stChat').textContent = status?.counters?.chat ?? 0;
+
+  $('startBtn').disabled = false;
+  $('startBtn').textContent = running ? '切换直播间' : '开始监控';
+  $('stopBtn').disabled = !running;
+  renderVoice();
+}
+
+async function post(url, body){
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
+$('startBtn').addEventListener('click', async () => {
+  const room = $('roomInput').value.trim();
+  if (!room){ setBanner('请先输入直播间地址或房间号', true); return; }
+
+  $('startBtn').disabled = true;
+  $('startBtn').textContent = '连接中…';
+  setBanner('正在打开直播间，需要几秒钟…', false);
+  dot.className = 'dot warn';
+
+  try {
+    status = await post('/api/room', { room });
+    history.replaceState(null, '', '?room=' + encodeURIComponent(room));
+    render();
+  } catch (e){
+    setBanner(e.message, true);
+    dot.className = 'dot err';
+    $('startBtn').disabled = false;
+    $('startBtn').textContent = '开始监控';
+  }
+});
+
+$('stopBtn').addEventListener('click', async () => {
+  $('stopBtn').disabled = true;
+  try { status = await post('/api/stop'); render(); }
+  catch (e){ setBanner(e.message, true); $('stopBtn').disabled = false; }
+});
+
+function connect(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/events`);
+
+  ws.onopen = () => {
+    // 连接后拉一次完整状态
+    fetch('/api/status').then(r => r.json()).then(s => { status = s; render(); }).catch(() => {});
+  };
+  ws.onclose = () => { setTimeout(connect, 1500); };
+  ws.onmessage = (e) => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+
+    if (m.type === 'hello'){
+      status = { ...status, ...m, recentGifts: undefined };
+      render();
+      // 自动带上 URL 里的房间号
+      const q = new URLSearchParams(location.search).get('room');
+      if (q && !$('roomInput').value) $('roomInput').value = q;
+      return;
+    }
+    if (m.type === 'stats'){
+      if (status){ status.online = m.online; status.totalViewers = m.totalViewers; }
+      render(); return;
+    }
+    if (m.type === 'room'){
+      if (status){ status.room = m.room; status.loggedIn = m.loggedIn; status.running = true; }
+      render(); return;
+    }
+    if (m.type === 'login-state'){
+      if (status) status.loggedIn = m.loggedIn;
+      render(); return;
+    }
+    if (m.type === 'stopped'){
+      status = { running:false, room:null, counters:{}, online:null };
+      render(); return;
+    }
+    if (m.type === 'voice-config'){
+      if (status) status.voice = m.voice;
+      renderVoice(); return;
+    }
+    if (m.type === 'error'){
+      setBanner(m.message, true); return;
+    }
+    if (m.type in { enter:1, chat:1, gift:1, like:1, follow:1, share:1 }){
+      if (status?.counters){ status.counters[m.type] = (status.counters[m.type] || 0) + 1; }
+      render();
+    }
+  };
+}
+
+/* ---------- 语音播报设置 ---------- */
+const vEl = {
+  enabled: $('vEnabled'), enter: $('vEnter'), gift: $('vGift'),
+  cooldown: $('vCooldown'), volume: $('vVolume'), tip: $('vTip'),
+};
+function renderVoice(){
+  const v = status?.voice || {};
+  vEl.enabled.checked = !!v.enabled;
+  vEl.enter.checked = v.enter !== false;
+  vEl.gift.checked = v.gift !== false;
+  vEl.cooldown.value = v.enterCooldown ?? 25;
+  vEl.volume.value = v.volume ?? 0.85;
+  if (status?.tts?.available === false){
+    vEl.tip.textContent = '服务端不是 macOS，没有合成音频兜底；不过浏览器自带中文语音的（手机、Win、Mac）照样能出声。';
+  } else {
+    vEl.tip.textContent = '优先用浏览器自带的中文语音（手机、电脑、平板都能出声），浏览器没有中文语音时才用服务端合成。浏览器要求页面先被点过才能自动出声：点一下 3D 工作室页面即可。';
+  }
+}
+async function saveVoice(patch){
+  try {
+    status = await post('/api/voice', patch);
+    renderVoice();
+  } catch (e){ setBanner(e.message, true); }
+}
+vEl.enabled.addEventListener('change', () => saveVoice({ enabled: vEl.enabled.checked }));
+vEl.enter.addEventListener('change', () => saveVoice({ enter: vEl.enter.checked }));
+vEl.gift.addEventListener('change', () => saveVoice({ gift: vEl.gift.checked }));
+vEl.cooldown.addEventListener('change', () => saveVoice({ enterCooldown: Number(vEl.cooldown.value) || 0 }));
+vEl.volume.addEventListener('input', () => saveVoice({ volume: Number(vEl.volume.value) }));
+$('vTest').addEventListener('click', () => {
+  // 试听：跟页面里同一套逻辑——有系统中文语音就本地念，没有才走服务端合成
+  const volume = Number(vEl.volume.value);
+  const text = '感谢小鹿乱撞的嘉年华，老板大气，福气加倍';
+  const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
+  const vs = synth ? synth.getVoices() : [];
+  const v = vs.find((x) => /^zh/i.test(x.lang || '')) || null;
+  if (synth && (v || vs.length === 0)) {
+    const u = new SpeechSynthesisUtterance(text);
+    if (v) u.voice = v;
+    u.lang = (v && v.lang) || 'zh-CN';
+    u.volume = volume;
+    u.pitch = 1.12;
+    synth.speak(u);
+    return;
+  }
+  const a = new Audio('/tts?voice=1');
+  a.volume = volume;
+  a.play().catch(() => setBanner('浏览器拦截了自动播放，再点一次「试听」', true));
+});
+
+// 服务端已有监控任务时，自动填充输入框
+fetch('/api/status').then(r => r.json()).then(s => {
+  status = s; render();
+  if (s.room?.url) $('roomInput').value = s.room.url;
+}).catch(() => {});
+connect();
+</script>
+</body>
+</html>
